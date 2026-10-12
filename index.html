@@ -1190,7 +1190,9 @@ const PERSON = p => p === 'jigar' ? "Jigar's team" : (p ? p.charAt(0).toUpperCas
 /* Two-stage approval (17/09/2026): a planned item (plan_batch_id set) needs its TOPIC
    approved before it is written, then its written content approved. */
 const isPlanned = r => !!r.plan_batch_id;
-const topicWaiting = r => isPlanned(r) && !r.topic_approved;
+/* LinkedIn write-ahead (Jose 12/10/2026): every LinkedIn piece is written before the client sees its
+   topic, so a LinkedIn item never waits on a topic tick; one approval covers topic and article. */
+const topicWaiting = r => isPlanned(r) && !r.topic_approved && r.deliverable !== 'linkedin_article';
 /* Monday of the item's week, as a sortable key. Weeks are never shown as dates (rule 2a). */
 const weekKey = iso => { const d = new Date(iso + 'T00:00:00'); const dow = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - dow); return d.toISOString().slice(0, 10); };
@@ -2379,10 +2381,10 @@ function blogStage(r){
   if (ME.kind !== 'internal') {
     if (a) return null;                                    // released: Read & comment shows instead
     if (r.review_on) return { cls:'b-ready', label:'Ready for you on ' + ausDate(r.review_on) };
-    if (r.topic_approved && !r.approved) return { cls:'b-writing', label:'Being written' };
+    if ((r.topic_approved || r.deliverable === 'linkedin_article') && !r.approved) return { cls:'b-writing', label:'Being written' };
     return null;
   }
-  if (!a) return r.topic_approved && !r.approved ? { cls:'b-writing', label:'Writing' } : null;
+  if (!a) return (r.topic_approved || r.deliverable === 'linkedin_article') && !r.approved ? { cls:'b-writing', label:'Writing' } : null;
   if (a.released_at) return { cls:'b-client', label:'With the client' };
   if (a.qc_status === 'approved') return { cls:'b-ready', label:'QC approved · releases ' + ausDate(r.review_on) };
   if (a.qc_status === 'changes') return { cls:'b-changes', label:'Sent back for changes' };
@@ -3063,7 +3065,7 @@ function monthBriefMarkup(t){
   if (!rows.length) return '<p class="empty">Nothing scheduled for this month yet.</p>';
   const staff = ME.kind === 'internal';
 
-  const planned = rows.filter(isPlanned);
+  const planned = rows.filter(r => isPlanned(r) && r.deliverable !== 'linkedin_article');
   const topicsOk = planned.filter(r => r.topic_approved).length;
   const topicsLeft = planned.length - topicsOk;
   const done    = rows.filter(r => r.approved).length;
@@ -3290,12 +3292,12 @@ function itemCard(r, staff){
       + link(r.doc_url, '', 'Draft') + link(r.live_url, 'live', 'Live')
     + '</div></div>'
     + '<div class="ticks">'
-      + (isPlanned(r)
+      + (isPlanned(r) && !li
           ? '<label class="tickl"><input class="tick" type="checkbox" data-topic="'+id+'"'+(r.topic_approved?' checked':'')+'> Approve topic</label>'
           : '')
       + '<label class="tickl"><input class="tick" type="checkbox" data-approve="'+id+'"'
         + (r.approved?' checked':'') + (canTick?'':' disabled')
-        + ' title="'+(canTick?'Approve this item':(topicWaiting(r)?'Approve the topic first':'Not ready for approval yet'))+'"> Approve content</label>'
+        + ' title="'+(canTick?'Approve this item':(topicWaiting(r)?'Approve the topic first':'Not ready for approval yet'))+'"> '+(li ? 'Approve topic &amp; article' : 'Approve content')+'</label>'
       + '<label class="tickl no"><input class="tick" type="checkbox" data-reject="'+id+'"'
         + (r.not_approved?' checked':'')
         + ' title="Tell us what needs changing"> Not approved</label>'
@@ -3474,6 +3476,7 @@ function wireMonthBrief(el, t){
     if (error) { cb.checked = !cb.checked; badge('Could not save that.','err'); return; }
     const it = ITEMS.find(r => r.id === id);
     it.approved = cb.checked;
+    if (cb.checked) it.topic_approved = true;
     it.client_status = cb.checked ? 'approved' : 'for_approval';
     badge('Saved','ok');
     refreshMonth(t);
@@ -3507,7 +3510,7 @@ function wireMonthBrief(el, t){
     if (error) { badge('Could not approve that week.','err'); return; }
     ITEMS.filter(r => ids.includes(r.id)).forEach(r => {
       Object.assign(r, patch);
-      if (patch.approved) r.client_status = 'approved';
+      if (patch.approved) { r.client_status = 'approved'; r.topic_approved = true; }
     });
     badge('Week approved','ok');
     refreshMonth(t);
@@ -3528,7 +3531,7 @@ function wireMonthBrief(el, t){
     if (error) { badge('Could not approve the month.','err'); refreshMonth(t); return; }
     ITEMS.filter(r => ids.includes(r.id)).forEach(r => {
       Object.assign(r, patch);
-      if (patch.approved) r.client_status = 'approved';
+      if (patch.approved) { r.client_status = 'approved'; r.topic_approved = true; }
     });
     badge(ids.length + ' approved','ok');
     refreshMonth(t);
@@ -3838,7 +3841,7 @@ function planPanel(){
   const lastFail = REQUESTS.find(r => r.status === 'failed');
   let line = 'No three-month plan yet.';
   if (latest) {
-    const items = ITEMS.filter(r => r.plan_batch_id === latest.id);
+    const items = ITEMS.filter(r => r.plan_batch_id === latest.id && r.deliverable !== 'linkedin_article');
     const ok = items.filter(r => r.topic_approved).length;
     line = 'Current plan: <b>' + esc(monthLabel(latest.start_month)) + '</b> for ' + latest.months + ' months · '
          + ok + ' / ' + items.length + ' topics approved by the client';
