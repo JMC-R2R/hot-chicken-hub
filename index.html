@@ -1117,7 +1117,7 @@
   <label for="eNew">Replace with</label>
   <textarea id="eNew"></textarea>
   <div class="ai"><input id="eAsk" maxlength="600" placeholder="Or tell AI what to change, e.g. make it shorter"><button type="button" id="eAI">Suggest with AI</button></div>
-  <p class="note">AI keeps to the client's voice, facts and service areas. Read the wording before you apply it. Every edit is in the change log and can be undone.</p>
+  <p class="note">AI keeps to the client's voice, facts and service areas. Read the wording before you apply it. To delete the passage, clear the box and press Apply. Every edit is in the change log and can be undone.</p>
   <div class="row"><span class="as" id="eAs"></span>
     <span><button type="button" id="eCancel">Cancel</button> <button type="button" class="go" id="eApply">Apply edit</button></span></div>
 </div>
@@ -1617,7 +1617,7 @@ function selectionContext(){
   const e = i + PENDINGSEL.quote.length;
   return { before: text.slice(Math.max(0, i - 600), i), after: text.slice(e, e + 600) };
 }
-function replaceInHtml(html, sel){
+function replaceInHtml(html, sel, del){
   const box = document.createElement('div'); box.innerHTML = html;
   const { nodes, text } = textIndex(box);
   const start = locate(text, sel);
@@ -1628,10 +1628,20 @@ function replaceInHtml(html, sel){
   if (!s || !e) return { err: 'Could not find that passage. Close the article, reopen it and try again.' };
   const BLOCK = 'p,li,h2,h3,h4,td,th,figcaption,dd,dt';
   const bs = s.n.parentElement.closest(BLOCK), be = e.n.parentElement.closest(BLOCK);
-  if (!bs || bs !== be) return { err: 'Edit one paragraph, heading or list item at a time.' };
+  /* A deletion may run across several blocks; a rewrite stays inside one. */
+  if (!bs || !be || (bs !== be && !del)) return { err: 'Edit one paragraph, heading or list item at a time. To remove several paragraphs, clear the box and press Apply.' };
   const r = document.createRange(); r.setStart(s.n, start - s.start); r.setEnd(e.n, end - e.start);
   const hasLink = !!r.cloneContents().querySelector('a') || s.n.parentElement.closest('a') !== e.n.parentElement.closest('a');
-  return { box, r, hasLink };
+  return { box, r, hasLink, blocks: [bs, be] };
+}
+/* After a deletion, drop any paragraph, heading or list item it left empty (and a list left
+   with no items), so a removed paragraph does not leave a blank gap in the article. */
+function pruneEmpty(box){
+  const BLOCK = 'p,li,h2,h3,h4,figcaption,dd,dt';
+  box.querySelectorAll(BLOCK).forEach(b => {
+    if (!b.textContent.trim() && !b.querySelector('img,picture,video,iframe')) b.remove();
+  });
+  box.querySelectorAll('ul,ol').forEach(l => { if (!l.querySelector('li')) l.remove(); });
 }
 $('selEdit').addEventListener('click', e => {
   e.stopPropagation();
@@ -1672,19 +1682,25 @@ $('eAI').addEventListener('click', async () => {
 $('eApply').addEventListener('click', async () => {
   if (!PENDINGSEL || !ART) return;
   const repl = $('eNew').value.replace(/\s+/g, ' ').trim();
-  if (!repl) { badge('Type the new wording, or press Cancel.','err'); $('eNew').focus(); return; }
+  const del = !repl;
   if (repl === PENDINGSEL.quote) { $('eForm').hidden = true; return; }
-  const out = replaceInHtml(ART.html, PENDINGSEL);
+  const out = replaceInHtml(ART.html, PENDINGSEL, del);
   if (out.err) { badge(out.err,'err'); return; }
-  if (out.hasLink && !confirm('This passage contains a link. Applying the edit removes that link. Continue?')) return;
-  out.r.deleteContents(); out.r.insertNode(document.createTextNode(repl)); out.box.normalize();
+  if (del) {
+    if (!confirm('Delete this passage from the article?' + (out.hasLink ? ' It contains a link, which will go too.' : '') + ' You can bring it back with Undo.')) return;
+    out.r.deleteContents(); pruneEmpty(out.box); out.box.normalize();
+    if (!out.box.textContent.trim()) { badge('That would leave the article empty.','err'); return; }
+  } else {
+    if (out.hasLink && !confirm('This passage contains a link. Applying the edit removes that link. Continue?')) return;
+    out.r.deleteContents(); out.r.insertNode(document.createTextNode(repl)); out.box.normalize();
+  }
   $('eApply').disabled = true;
   const { data, error } = await sb.rpc('ch_edit_article', { p_item_id: ART.id, p_html: out.box.innerHTML,
     p_base_version: ART.version, p_old: PENDINGSEL.quote, p_new: repl, p_ai: EDIT_AI });
   $('eApply').disabled = false;
   if (error) { badge(error.message || 'Could not save the edit.','err'); return; }
   $('eForm').hidden = true; PENDINGSEL = null; window.getSelection().removeAllRanges();
-  badge('Edit applied (version ' + data + ')','ok');
+  badge((del ? 'Passage deleted' : 'Edit applied') + ' (version ' + data + ')','ok');
   openArticle(ART.id, true);
 });
 $('artUndo').addEventListener('click', async () => {
