@@ -2246,6 +2246,12 @@ function wireDashCta(){
   b.onclick = () => selectTab('reporting');
 }
 
+// A Slack link opened in a tab that already shows this hub only changes the hash, which does not
+// reload the page, so handle ticket links here too (Jhen 20/10/2026).
+window.addEventListener('hashchange', () => {
+  if (ME && ME.kind === 'internal' && (location.hash || '').startsWith('#tickets/')) openDeepLink();
+});
+
 function openDeepLink(){
   const want = decodeURIComponent((location.hash || '').replace(/^#/,''));
   if (!want) return;
@@ -2745,11 +2751,14 @@ async function tkPaintDetail(el, box, r, act){
   if (ab && act) {
     const cancel = '<button type="button" class="btn ghost" id="tkActNo">Cancel</button>';
     const done = r.status === 'resolved' || r.status === 'closed';
+    const doneMsg = '<b>Ticket #' + r.number + ' is already ' + esc(tkLabel(r.status)) + ', so there is nothing to do.</b>'
+      + '<div>' + (r.assignee_name ? 'It was handled by ' + esc(r.assignee_name) + '. ' : '') + 'To reopen it, change its Status below.</div>'
+      + '<div class="tkact"><button type="button" class="btn ghost" id="tkActNo">OK</button></div>';
     if (act === 'claim') {
       // Jhen 20/10/2026: confirm the move to In progress, and an assignee is required.
       const mine = (TK_TEAM || []).find(p => p.name === ME.name);
       ab.innerHTML = done
-        ? '<b>This ticket is already ' + esc(tkLabel(r.status).toLowerCase()) + '.</b><div class="tkact">' + cancel + '</div>'
+        ? doneMsg
         : '<b>Take ticket #' + r.number + '?</b>'
           + '<div>Its status changes to <b>In progress</b>' + (r.assignee_name ? ', and it moves from ' + esc(r.assignee_name) : '') + '. Choose who is handling it to continue.</div>'
           + '<div class="tkact"><label class="fk" for="tkActWho">Handled by</label><select id="tkActWho"><option value="">Choose a person</option>'
@@ -2774,7 +2783,7 @@ async function tkPaintDetail(el, box, r, act){
       });
     } else if (act === 'resolve') {
       ab.innerHTML = done
-        ? '<b>This ticket is already ' + esc(tkLabel(r.status).toLowerCase()) + '.</b><div class="tkact">' + cancel + '</div>'
+        ? doneMsg
         : '<b>Mark ticket #' + r.number + ' as resolved?</b>'
           + '<div>The client is told it is fixed and asked to confirm. Say what was done, in words the client will understand.</div>'
           + '<textarea id="tkActNote" maxlength="2000" placeholder="What was done? This goes to the client."></textarea>'
@@ -2792,6 +2801,7 @@ async function tkPaintDetail(el, box, r, act){
     }
     const no = ab.querySelector('#tkActNo');
     if (no) no.addEventListener('click', () => { settle(''); tkPaint(el); });
+    ab.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 }
 
