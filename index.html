@@ -2672,7 +2672,7 @@ async function tkPaintDetail(el, box, r, act){
   if (!r) { TK_OPEN = null; TK_ACT = null; return tkPaint(el); }
   const tok = ++TK_PAINT;
   const staff = ME.kind === 'internal';
-  act = staff ? (act || TK_ACT) : null;
+  act = staff ? (act || TK_ACT) : (TK_ACT === 'still' ? 'still' : null);
   // Supabase only sends a request once it is awaited or then'd, so a bare call never ran.
   if (staff) sb.rpc('ch_ticket_mark_viewed', { p_ticket: r.id }).then(() => {});
   const [{ data: msgs }, ev, dead] = await Promise.all([
@@ -2769,14 +2769,10 @@ async function tkPaintDetail(el, box, r, act){
   autosave('#tkPriSel', r.priority, v => sb.rpc('ch_ticket_set_priority', { p_ticket: r.id, p_priority: v }));
   autosave('#tkAssign', r.assignee_person || '', v => sb.rpc('ch_ticket_assign', { p_ticket: r.id, p_person: v || null }));
   autosave('#tkStatus', r.status, v => {
-    let note = null;
-    if (v === 'resolved' || v === 'closed') {
-      note = prompt(v === 'resolved'
-        ? 'We\'ll let the client know it\'s sorted and ask them to confirm. Add a quick note on what you did, in plain English.'
-        : 'This closes the ticket without asking the client to confirm. Add a quick note for the client on why, in plain English.');
-      if (!note || !note.trim()) return false;
-    }
-    return sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: v, p_note: note });
+    // Resolved and Closed open the same pop-up as the Slack links (Jhen 20/10/2026), instead of
+    // the browser's own prompt box. The menu goes back until the pop-up is confirmed.
+    if (v === 'resolved' || v === 'closed') { TK_ACT = v === 'resolved' ? 'resolve' : 'close'; tkPaint(el); return false; }
+    return sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: v, p_note: null });
   });
   const resend = box.querySelector('#tkResend');
   if (resend) resend.addEventListener('click', async () => {
@@ -2789,11 +2785,7 @@ async function tkPaintDetail(el, box, r, act){
     if (error) return fail(error.message); reload();
   });
   const still = box.querySelector('#tkStill');
-  if (still) still.addEventListener('click', async () => {
-    const note = prompt('What is still wrong?'); if (!note || !note.trim()) return;
-    const { error } = await sb.rpc('ch_ticket_client_confirm', { p_ticket: r.id, p_fixed: false, p_note: note });
-    if (error) return fail(error.message); reload();
-  });
+  if (still) still.addEventListener('click', () => { TK_ACT = 'still'; tkPaint(el); });
 
   // Confirm boxes for I'm on it and Mark resolved, from the Slack links or the page.
   // Nothing changes until the person confirms, and both run as the signed-in person.
@@ -2848,6 +2840,41 @@ async function tkPaintDetail(el, box, r, act){
         const { error } = await sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: 'resolved', p_note: note.value.trim() });
         if (error) { go.disabled = false; return fail(error.message); }
         settle('Saved ✓ Resolved, and the client has the note');
+        reload();
+      });
+    } else if (act === 'close') {
+      ab.innerHTML = r.status === 'closed'
+        ? doneMsg
+        : '<b>Close ticket #' + r.number + ' without asking the client to confirm?</b>'
+          + '<div>This closes it straight away. Add a quick note for the client on why, in plain English.</div>'
+          + '<textarea id="tkActNote" maxlength="2000" placeholder="For example: This was raised twice, so we’re handling it on ticket #2001."></textarea>'
+          + '<div class="tkact"><button type="button" class="btn" id="tkActGo" disabled>Yes, close it</button>' + cancel + '</div>';
+      const note = ab.querySelector('#tkActNote'), go = ab.querySelector('#tkActGo');
+      if (note) note.addEventListener('input', () => { go.disabled = !note.value.trim(); });
+      if (go) go.addEventListener('click', async () => {
+        if (!note.value.trim()) return fail('Add a note for the client first.');
+        go.disabled = true;
+        const { error } = await sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: 'closed', p_note: note.value.trim() });
+        if (error) { go.disabled = false; return fail(error.message); }
+        settle('Saved ✓ Closed');
+        reload();
+      });
+    } else if (act === 'still') {
+      // The client's Still a problem (Jhen 20/10/2026: same pop-up style as the team's).
+      ab.innerHTML = r.status !== 'resolved'
+        ? '<b>Ticket #' + r.number + ' is already back with our team.</b><div class="tkact"><button type="button" class="btn ghost" id="tkActNo">OK</button></div>'
+        : '<b>What’s still not right?</b>'
+          + '<div>Tell us what you’re still seeing and we’ll jump back on it.</div>'
+          + '<textarea id="tkActNote" maxlength="2000" placeholder="For example: The new hours show on the Contact page but not in the footer."></textarea>'
+          + '<div class="tkact"><button type="button" class="btn" id="tkActGo" disabled>Send to the team</button>' + cancel + '</div>';
+      const note = ab.querySelector('#tkActNote'), go = ab.querySelector('#tkActGo');
+      if (note) note.addEventListener('input', () => { go.disabled = !note.value.trim(); });
+      if (go) go.addEventListener('click', async () => {
+        if (!note.value.trim()) return fail('Tell us what is still wrong first.');
+        go.disabled = true;
+        const { error } = await sb.rpc('ch_ticket_client_confirm', { p_ticket: r.id, p_fixed: false, p_note: note.value.trim() });
+        if (error) { go.disabled = false; return fail(error.message); }
+        settle('Thanks, the team has your message');
         reload();
       });
     }
