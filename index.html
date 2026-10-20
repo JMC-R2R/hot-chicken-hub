@@ -952,6 +952,7 @@
   .tkmodal-card{background:#fff;border:0;width:100%;max-width:480px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:20px;gap:12px}
   .tkmodal-card b:first-child{font-size:17px;color:var(--ink-dk)}
   body.tkmodal-on{overflow:hidden}
+  .tkold{display:inline-block;font-size:11px;font-weight:600;color:#55606b;background:#eef1f4;border:1px dashed #c9d1da;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:1px}
   .tkflash{background:#dff3e9;color:#1c7c54;border-radius:10px;padding:9px 12px;font-weight:600;font-size:14px}
   .tfst.wont_do{background:#eceef1;color:#5b6270}
   .fb .tfreply{font-size:14px;color:var(--ink);border-left:3px solid #1c7c54;padding-left:9px;margin-top:8px}
@@ -2532,6 +2533,8 @@ let TK_ACT = null, TK_PAINT = 0, TK_FLASH = '';
 
 const tkLabel = s => (ME.kind === 'internal' && TK_STATUS_TEAM[s]) || (TK_STATUS.find(x => x[0] === s) || [s, s])[1];
 const tkPri = p => '<span class="tkpr ' + esc(p) + '">' + esc(p) + '</span>';
+// Tickets copied from the Lovable dashboard (Jhen 20/10/2026).
+const tkOld = r => r.source === 'lovable' ? '<span class="tkold" title="Raised on the old client dashboard and copied here">From the old dashboard</span>' : '';
 
 function ticketsMarkup(){
   return '<div class="tkbar"><button type="button" class="btn" id="tkNew">Raise a ticket</button><span class="grow"></span>'
@@ -2575,7 +2578,7 @@ function tkPaint(el, act){
       + '" data-tkf="' + k + '">' + l + ' <b>' + TK_ROWS.filter(fn).length + '</b></button>').join('') + '</div>'
     + (shown.length ? '<div class="tklist">' + shown.map(r =>
         '<div class="tk" data-tko="' + r.id + '"><div><span class="tkn">#' + r.number + '</span> <span class="tks">' + esc(r.subject) + '</span>'
-        + tkPri(r.priority) + '</div><span class="tfst ' + esc(r.status) + '">' + esc(tkLabel(r.status)) + '</span>'
+        + tkPri(r.priority) + tkOld(r) + '</div><span class="tfst ' + esc(r.status) + '">' + esc(tkLabel(r.status)) + '</span>'
         + '<div class="tkm">' + esc(r.category) + ' · raised by ' + esc(r.raised_name || 'Client') + ' · ' + esc(cWhen(r.created_at))
         + (r.assignee_name ? ' · with ' + esc(ME.kind === 'internal' ? r.assignee_name : r.assignee_name.split(' ')[0]) : '') + '</div></div>').join('') + '</div>'
       : '<p class="empty">' + (TK_ROWS.length ? 'Nothing here.' : 'No tickets yet. Raise one with the button above.') + '</p>');
@@ -2650,7 +2653,7 @@ async function tkPaintDetail(el, box, r, act){
   const canConfirm = !staff && r.status === 'resolved';
   box.innerHTML = '<div class="tkdetail"><div><a href="#" id="tkBack">← All tickets</a></div>'
     + (flash ? '<div class="tkflash" id="tkFlash">' + esc(flash) + '</div>' : '')
-    + '<div><span class="tkn">#' + r.number + '</span> <span class="tfst ' + esc(r.status) + '">' + esc(tkLabel(r.status)) + '</span>' + tkPri(r.priority)
+    + '<div><span class="tkn">#' + r.number + '</span> <span class="tfst ' + esc(r.status) + '">' + esc(tkLabel(r.status)) + '</span>' + tkPri(r.priority) + tkOld(r)
     + '<h3>' + esc(r.subject) + '</h3><div class="tkm">' + esc(r.category) + ' · raised ' + esc(cWhen(r.created_at))
     + (r.assignee_name ? ' · with ' + esc(staff ? r.assignee_name : r.assignee_name.split(' ')[0]) : ' · not picked up yet') + '</div></div>'
     + (canConfirm ? '<div class="tkconfirm"><b>We think this is fixed.</b>' + (r.resolution_note ? '<div>' + esc(r.resolution_note) + '</div>' : '')
