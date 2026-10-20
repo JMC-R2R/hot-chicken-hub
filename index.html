@@ -2839,7 +2839,11 @@ function tkLogLine(e){
     unassigned:'unassigned it', priority_changed:'changed priority ' + (d.from || '') + ' → ' + (d.to || ''),
     status_changed:'moved it ' + String(d.from || '').replace('_',' ') + ' → ' + String(d.to || '').replace('_',' ') + (d.why ? ' (' + d.why + ')' : ''),
     replied:'replied', internal_note:'added a team note', client_confirmed:'confirmed it is fixed',
-    client_reopened:'said it is still a problem', slack_sent:'Slack notice sent (' + (d.kind || '') + ')', slack_resent:'resent to Slack' }[e.event] || e.event;
+    client_reopened:'said it is still a problem', slack_sent:'Slack notice sent (' + (d.kind || '') + ')', slack_resent:'resent to Slack',
+    reminder_sent: { unclaimed_1:'reminded the team nobody has taken it (1 business day)', unclaimed_2:'escalated to Jhen, still not taken (2 business days)',
+      stale:'nudged ' + (d.to || 'the team') + ', no update for 3 business days' }[d.stage] || 'sent a reminder',
+    auto_closed:'closed it automatically, no client reply 7 business days after it was resolved',
+    migrated:'copied it from the old dashboard' + (d.lovable_ticket ? ' (ticket #' + d.lovable_ticket + ')' : '') }[e.event] || e.event;
   return '<div>' + esc(cWhen(e.created_at)) + ' · <b>' + esc(e.actor_name || 'System') + '</b> ' + esc(what) + '</div>';
 }
 
