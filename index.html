@@ -2643,12 +2643,12 @@ async function tkPaintDetail(el, box, r, act){
         + '<button type="button" class="btn" id="tkSendR">Send</button></div><p class="tferr" id="tkRErr" hidden></p></div>' : '')
     + (staff ? '<div class="tkact">'
         + (!r.assignee_name && r.status !== 'resolved' && r.status !== 'closed' ? '<button type="button" class="btn" id="tkClaim">I’m on it</button>' : '')
-        + '<select id="tkStatus">' + TK_STATUS.map(([v]) => '<option value="' + v + '"' + (v === r.status ? ' selected' : '') + '>' + esc(tkLabel(v)) + '</option>').join('') + '</select>'
-        // The whole team from the Slack routing list; assigning tags them in the ticket's thread.
-        + '<select id="tkAssign" title="Assigning someone tags them in the Slack thread"><option value="">Nobody</option>' + TK_TEAM.map(p => '<option value="' + esc(p.person) + '"'
+        // Each menu saves the moment it changes (Jhen 20/10/2026: a Save button gets forgotten).
+        + '<label class="fk" for="tkStatus">Status</label><select id="tkStatus">' + TK_STATUS.map(([v]) => '<option value="' + v + '"' + (v === r.status ? ' selected' : '') + '>' + esc(tkLabel(v)) + '</option>').join('') + '</select>'
+        // Ticket handlers from the Slack routing list; assigning tags them in the ticket's thread.
+        + '<label class="fk" for="tkAssign">With</label><select id="tkAssign" title="Assigning someone tags them in the Slack thread"><option value="">Nobody</option>' + TK_TEAM.map(p => '<option value="' + esc(p.person) + '"'
           + (p.person === r.assignee_person ? ' selected' : '') + '>' + esc(p.name) + (p.has_login ? '' : ' (no hub login)') + '</option>').join('') + '</select>'
-        + '<select id="tkPriSel">' + TK_PRI.map(([v, l]) => '<option value="' + v + '"' + (v === r.priority ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>'
-        + '<button type="button" class="btn ghost" id="tkSave">Save changes</button>'
+        + '<label class="fk" for="tkPriSel">Priority</label><select id="tkPriSel">' + TK_PRI.map(([v, l]) => '<option value="' + v + '"' + (v === r.priority ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>'
         + (ME.admin ? '<button type="button" class="btn ghost" id="tkResend">Resend to Slack</button>' : '') + '</div>'
         + '<details><summary>Activity</summary><div class="tklog">' + (ev.data || []).map(tkLogLine).join('') + '</div></details>' : '')
     + '</div>';
@@ -2682,18 +2682,30 @@ async function tkPaintDetail(el, box, r, act){
     const { error } = await sb.rpc('ch_ticket_claim', { p_ticket: r.id });
     if (error) return fail(error.message); reload();
   });
-  const save = box.querySelector('#tkSave');
-  if (save) save.addEventListener('click', async () => {
-    const st = box.querySelector('#tkStatus').value, who = box.querySelector('#tkAssign').value || null, pr = box.querySelector('#tkPriSel').value;
-    if (pr !== r.priority) { const { error } = await sb.rpc('ch_ticket_set_priority', { p_ticket: r.id, p_priority: pr }); if (error) return fail(error.message); }
-    if ((who || null) !== (r.assignee_person || null)) { const { error } = await sb.rpc('ch_ticket_assign', { p_ticket: r.id, p_person: who }); if (error) return fail(error.message); }
-    if (st !== r.status) {
-      let note = null;
-      if (st === 'resolved' || st === 'closed') { note = prompt('What was done? This goes to the client.'); if (!note || !note.trim()) return; }
-      const { error } = await sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: st, p_note: note });
-      if (error) return fail(error.message);
+  // Save on change. On cancel or error the menu goes back to what is saved, so it never shows
+  // a change that did not happen.
+  const autosave = (id, was, run) => {
+    const sel = box.querySelector(id);
+    if (!sel) return;
+    sel.addEventListener('change', async () => {
+      sel.disabled = true;
+      const res = await run(sel.value);
+      sel.disabled = false;
+      if (res === false) { sel.value = was; return; }
+      if (res && res.error) { sel.value = was; return fail('Not saved: ' + res.error.message); }
+      badge('Saved', 'ok');
+      reload();
+    });
+  };
+  autosave('#tkPriSel', r.priority, v => sb.rpc('ch_ticket_set_priority', { p_ticket: r.id, p_priority: v }));
+  autosave('#tkAssign', r.assignee_person || '', v => sb.rpc('ch_ticket_assign', { p_ticket: r.id, p_person: v || null }));
+  autosave('#tkStatus', r.status, v => {
+    let note = null;
+    if (v === 'resolved' || v === 'closed') {
+      note = prompt('What was done? This goes to the client.');
+      if (!note || !note.trim()) return false;
     }
-    reload();
+    return sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: v, p_note: note });
   });
   const resend = box.querySelector('#tkResend');
   if (resend) resend.addEventListener('click', async () => {
