@@ -947,6 +947,8 @@
   .tklog{display:grid;gap:4px;font-size:13px;color:var(--muted)}
   .tklog b{color:var(--ink)}
   .tkconfirm{background:#fff7e6;border:1px solid #f2d79b;border-radius:12px;padding:12px;display:grid;gap:8px}
+  .tkconfirm textarea{width:100%;min-height:80px;box-sizing:border-box}
+  .tkflash{background:#dff3e9;color:#1c7c54;border-radius:10px;padding:9px 12px;font-weight:600;font-size:14px}
   .tfst.wont_do{background:#eceef1;color:#5b6270}
   .fb .tfreply{font-size:14px;color:var(--ink);border-left:3px solid #1c7c54;padding-left:9px;margin-top:8px}
   .fb .tfimg{display:inline-block;margin-top:8px;font-size:13px;font-weight:700}
@@ -2513,6 +2515,10 @@ const TK_PRI = [['low','Low','Whenever you can, nothing is broken'],['medium','M
   ['high','High','Affecting enquiries or a campaign'],['urgent','Urgent','The website is down or leads have stopped']];
 const TK_CATS = ['Website Maintenance','Website Design','SEO','Google Ads','Social Media Management','LinkedIn Ads','CRM Services','App Development','Other'];
 let TK_FILTER = 'active', TK_ROWS = [], TK_OPEN = null, TK_PENDING = null, TK_TEAM = null, TK_VIEW = 'list';
+// TK_ACT: the confirm box to show ('claim' or 'resolve'). It lives here, not in a paint argument,
+// because the tab and the Slack link both load tickets and the later paint must keep the box.
+// TK_PAINT stops an older, slower paint overwriting a newer one. TK_FLASH is the "Saved" line.
+let TK_ACT = null, TK_PAINT = 0, TK_FLASH = '';
 
 const tkLabel = s => (ME.kind === 'internal' && TK_STATUS_TEAM[s]) || (TK_STATUS.find(x => x[0] === s) || [s, s])[1];
 const tkPri = p => '<span class="tkpr ' + esc(p) + '">' + esc(p) + '</span>';
@@ -2538,7 +2544,7 @@ async function tkLoad(el){
   if (TK_PENDING) {                       // a Slack link: #tickets/<n>[/claim|/resolve]
     const p = TK_PENDING; TK_PENDING = null;
     const r = TK_ROWS.find(x => x.number === p.num);
-    if (r) { TK_OPEN = r.id; TK_VIEW = 'list'; return tkPaint(el, p.act); }
+    if (r) { TK_OPEN = r.id; TK_VIEW = 'list'; TK_ACT = p.act; return tkPaint(el); }
   }
   tkPaint(el);
 }
@@ -2615,18 +2621,23 @@ function tkFileLinks(paths){
 }
 
 async function tkPaintDetail(el, box, r, act){
-  if (!r) { TK_OPEN = null; return tkPaint(el); }
+  if (!r) { TK_OPEN = null; TK_ACT = null; return tkPaint(el); }
+  const tok = ++TK_PAINT;
   const staff = ME.kind === 'internal';
+  act = staff ? (act || TK_ACT) : null;
   if (staff) sb.rpc('ch_ticket_mark_viewed', { p_ticket: r.id });
   const [{ data: msgs }, ev] = await Promise.all([
     sb.from('ch_ticket_messages').select('*').eq('ticket_id', r.id).order('created_at'),
     staff ? sb.from('ch_ticket_events').select('*').eq('ticket_id', r.id).order('created_at') : Promise.resolve({ data: [] })
   ]);
   if (staff && !TK_TEAM) { const { data: tm } = await sb.rpc('ch_ticket_team'); TK_TEAM = tm || []; }
+  if (tok !== TK_PAINT) return;          // a newer paint started while this one waited
+  const flash = TK_FLASH; TK_FLASH = '';
   const thread = [{ author_name: r.raised_name || 'Client', from_team: r.raised_by_team, body: r.description, created_at: r.created_at, attachments: r.attachments }]
     .concat(msgs || []);
   const canConfirm = !staff && r.status === 'resolved';
   box.innerHTML = '<div class="tkdetail"><div><a href="#" id="tkBack">← All tickets</a></div>'
+    + (flash ? '<div class="tkflash" id="tkFlash">' + esc(flash) + '</div>' : '')
     + '<div><span class="tkn">#' + r.number + '</span> <span class="tfst ' + esc(r.status) + '">' + esc(tkLabel(r.status)) + '</span>' + tkPri(r.priority)
     + '<h3>' + esc(r.subject) + '</h3><div class="tkm">' + esc(r.category) + ' · raised ' + esc(cWhen(r.created_at))
     + (r.assignee_name ? ' · with ' + esc(staff ? r.assignee_name : r.assignee_name.split(' ')[0]) : ' · not picked up yet') + '</div></div>'
@@ -2655,7 +2666,13 @@ async function tkPaintDetail(el, box, r, act){
 
   const reload = async () => { await tkLoad(el); };
   const fail = m => alert(m);
-  box.querySelector('#tkBack').addEventListener('click', e => { e.preventDefault(); TK_OPEN = null; history.replaceState(null, '', location.pathname + '#tickets'); tkPaint(el); });
+  // Done with a confirm box: drop it, and drop /claim or /resolve from the address so a
+  // refresh does not ask again.
+  const settle = msg => { TK_ACT = null; if (msg) TK_FLASH = msg;
+    history.replaceState(null, '', location.pathname + '#tickets/' + r.number); };
+  const fl = box.querySelector('#tkFlash');
+  if (fl) setTimeout(() => { fl.remove(); }, 4000);
+  box.querySelector('#tkBack').addEventListener('click', e => { e.preventDefault(); TK_OPEN = null; TK_ACT = null; history.replaceState(null, '', location.pathname + '#tickets'); tkPaint(el); });
   box.querySelectorAll('[data-tkfile]').forEach(a => a.addEventListener('click', async e => {
     e.preventDefault();
     const w = window.open('', '_blank');
@@ -2677,11 +2694,9 @@ async function tkPaintDetail(el, box, r, act){
     if (error) { err.textContent = 'Not sent: ' + error.message; err.hidden = false; return; }
     reload();
   });
+  // The page's I'm on it opens the same confirm box as the Slack link.
   const claim = box.querySelector('#tkClaim');
-  if (claim) claim.addEventListener('click', async () => {
-    const { error } = await sb.rpc('ch_ticket_claim', { p_ticket: r.id });
-    if (error) return fail(error.message); reload();
-  });
+  if (claim) claim.addEventListener('click', () => { TK_ACT = 'claim'; tkPaint(el); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   // Save on change. On cancel or error the menu goes back to what is saved, so it never shows
   // a change that did not happen.
   const autosave = (id, was, run) => {
@@ -2693,7 +2708,7 @@ async function tkPaintDetail(el, box, r, act){
       sel.disabled = false;
       if (res === false) { sel.value = was; return; }
       if (res && res.error) { sel.value = was; return fail('Not saved: ' + res.error.message); }
-      badge('Saved', 'ok');
+      TK_FLASH = 'Saved ✓';
       reload();
     });
   };
@@ -2724,29 +2739,59 @@ async function tkPaintDetail(el, box, r, act){
     if (error) return fail(error.message); reload();
   });
 
-  // Slack link actions: one confirm tap, run as the signed-in person.
+  // Confirm boxes for I'm on it and Mark resolved, from the Slack links or the page.
+  // Nothing changes until the person confirms, and both run as the signed-in person.
   const ab = box.querySelector('#tkAct');
   if (ab && act) {
-    if (!staff) { ab.remove(); }
-    else if (act === 'claim') {
-      ab.innerHTML = r.assignee_name
-        ? '<b>' + esc(r.assignee_name) + ' already has this one.</b>'
-        : '<b>Take ticket #' + r.number + '?</b><div class="tkact"><button type="button" class="btn" id="tkActGo">Yes, I’m on it</button></div>';
-      const go = ab.querySelector('#tkActGo');
-      if (go) go.addEventListener('click', async () => { const { error } = await sb.rpc('ch_ticket_claim', { p_ticket: r.id }); if (error) return fail(error.message); reload(); });
-    } else if (act === 'resolve') {
-      ab.innerHTML = (r.status === 'resolved' || r.status === 'closed')
-        ? '<b>This ticket is already ' + esc(tkLabel(r.status).toLowerCase()) + '.</b>'
-        : '<b>Resolve ticket #' + r.number + '</b><textarea id="tkActNote" maxlength="2000" placeholder="What was done? This goes to the client."></textarea>'
-          + '<div class="tkact"><button type="button" class="btn" id="tkActGo">Mark resolved</button></div>';
-      const go = ab.querySelector('#tkActGo');
+    const cancel = '<button type="button" class="btn ghost" id="tkActNo">Cancel</button>';
+    const done = r.status === 'resolved' || r.status === 'closed';
+    if (act === 'claim') {
+      // Jhen 20/10/2026: confirm the move to In progress, and an assignee is required.
+      const mine = (TK_TEAM || []).find(p => p.name === ME.name);
+      ab.innerHTML = done
+        ? '<b>This ticket is already ' + esc(tkLabel(r.status).toLowerCase()) + '.</b><div class="tkact">' + cancel + '</div>'
+        : '<b>Take ticket #' + r.number + '?</b>'
+          + '<div>Its status changes to <b>In progress</b>' + (r.assignee_name ? ', and it moves from ' + esc(r.assignee_name) : '') + '. Choose who is handling it to continue.</div>'
+          + '<div class="tkact"><label class="fk" for="tkActWho">Handled by</label><select id="tkActWho"><option value="">Choose a person</option>'
+          + (TK_TEAM || []).map(p => '<option value="' + esc(p.person) + '"' + (mine && p.person === mine.person ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></div>'
+          + '<div class="tkact"><button type="button" class="btn" id="tkActGo"' + (mine ? '' : ' disabled') + '>Confirm, move to In progress</button>' + cancel + '</div>';
+      const who = ab.querySelector('#tkActWho'), go = ab.querySelector('#tkActGo');
+      if (who) who.addEventListener('change', () => { go.disabled = !who.value; });
       if (go) go.addEventListener('click', async () => {
-        const note = ab.querySelector('#tkActNote').value.trim();
-        if (!note) return fail('Add a note for the client first.');
-        const { error } = await sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: 'resolved', p_note: note });
-        if (error) return fail(error.message); reload();
+        if (!who.value) return fail('Choose who is handling it first.');
+        go.disabled = true;
+        if (who.value !== (r.assignee_person || '')) {
+          const { error } = await sb.rpc('ch_ticket_assign', { p_ticket: r.id, p_person: who.value });
+          if (error) { go.disabled = false; return fail(error.message); }
+        }
+        const { data: now } = await sb.from('ch_tickets').select('status').eq('id', r.id).maybeSingle();
+        if (now && now.status !== 'in_progress') {
+          const { error } = await sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: 'in_progress', p_note: null });
+          if (error) { go.disabled = false; return fail(error.message); }
+        }
+        settle('Saved ✓ In progress, with ' + who.options[who.selectedIndex].text);
+        reload();
+      });
+    } else if (act === 'resolve') {
+      ab.innerHTML = done
+        ? '<b>This ticket is already ' + esc(tkLabel(r.status).toLowerCase()) + '.</b><div class="tkact">' + cancel + '</div>'
+        : '<b>Mark ticket #' + r.number + ' as resolved?</b>'
+          + '<div>The client is told it is fixed and asked to confirm. Say what was done, in words the client will understand.</div>'
+          + '<textarea id="tkActNote" maxlength="2000" placeholder="What was done? This goes to the client."></textarea>'
+          + '<div class="tkact"><button type="button" class="btn" id="tkActGo" disabled>Yes, mark resolved</button>' + cancel + '</div>';
+      const note = ab.querySelector('#tkActNote'), go = ab.querySelector('#tkActGo');
+      if (note) note.addEventListener('input', () => { go.disabled = !note.value.trim(); });
+      if (go) go.addEventListener('click', async () => {
+        if (!note.value.trim()) return fail('Add a note for the client first.');
+        go.disabled = true;
+        const { error } = await sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: 'resolved', p_note: note.value.trim() });
+        if (error) { go.disabled = false; return fail(error.message); }
+        settle('Saved ✓ Resolved, and the client has the note');
+        reload();
       });
     }
+    const no = ab.querySelector('#tkActNo');
+    if (no) no.addEventListener('click', () => { settle(''); tkPaint(el); });
   }
 }
 
