@@ -953,6 +953,7 @@
   .tkmodal-card b:first-child{font-size:17px;color:var(--ink-dk)}
   body.tkmodal-on{overflow:hidden}
   .tkold{display:inline-block;font-size:11px;font-weight:600;color:#55606b;background:#eef1f4;border:1px dashed #c9d1da;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:1px}
+  .tkwarn{background:#fbe1e1;color:#8a1f1f;border-radius:10px;padding:9px 12px;font-size:14px}
   .tkflash{background:#dff3e9;color:#1c7c54;border-radius:10px;padding:9px 12px;font-weight:600;font-size:14px}
   .tfst.wont_do{background:#eceef1;color:#5b6270}
   .fb .tfreply{font-size:14px;color:var(--ink);border-left:3px solid #1c7c54;padding-left:9px;margin-top:8px}
@@ -2642,9 +2643,11 @@ async function tkPaintDetail(el, box, r, act){
   act = staff ? (act || TK_ACT) : null;
   // Supabase only sends a request once it is awaited or then'd, so a bare call never ran.
   if (staff) sb.rpc('ch_ticket_mark_viewed', { p_ticket: r.id }).then(() => {});
-  const [{ data: msgs }, ev] = await Promise.all([
+  const [{ data: msgs }, ev, dead] = await Promise.all([
     sb.from('ch_ticket_messages').select('*').eq('ticket_id', r.id).order('created_at'),
-    staff ? sb.from('ch_ticket_events').select('*').eq('ticket_id', r.id).order('created_at') : Promise.resolve({ data: [] })
+    staff ? sb.from('ch_ticket_events').select('*').eq('ticket_id', r.id).order('created_at') : Promise.resolve({ data: [] }),
+    // Slack notices that failed 4 times and stopped retrying (ch_ticket_outbox, staff only).
+    staff ? sb.from('ch_ticket_outbox').select('kind,last_error').eq('ticket_id', r.id).eq('status', 'dead') : Promise.resolve({ data: [] })
   ]);
   if (tok !== TK_PAINT) return;          // a newer paint started while this one waited
   const flash = TK_FLASH; TK_FLASH = '';
@@ -2653,6 +2656,9 @@ async function tkPaintDetail(el, box, r, act){
   const canConfirm = !staff && r.status === 'resolved';
   box.innerHTML = '<div class="tkdetail"><div><a href="#" id="tkBack">← All tickets</a></div>'
     + (flash ? '<div class="tkflash" id="tkFlash">' + esc(flash) + '</div>' : '')
+    + ((dead.data || []).length ? '<div class="tkwarn">' + (dead.data.length === 1 ? 'A Slack notice' : dead.data.length + ' Slack notices')
+        + ' for this ticket did not go through after 4 tries (Slack said: ' + esc(dead.data[dead.data.length - 1].last_error || 'unknown') + ').'
+        + (ME.admin ? ' Once it is fixed, press Resend to Slack below.' : ' Let Jhen know.') + '</div>' : '')
     + '<div><span class="tkn">#' + r.number + '</span> <span class="tfst ' + esc(r.status) + '">' + esc(tkLabel(r.status)) + '</span>' + tkPri(r.priority) + tkOld(r)
     + '<h3>' + esc(r.subject) + '</h3><div class="tkm">' + esc(r.category) + ' · raised ' + esc(cWhen(r.created_at))
     + (r.assignee_name ? ' · with ' + esc(staff ? r.assignee_name : r.assignee_name.split(' ')[0]) : ' · not picked up yet') + '</div></div>'
@@ -2839,7 +2845,7 @@ function tkLogLine(e){
     unassigned:'unassigned it', priority_changed:'changed priority ' + (d.from || '') + ' → ' + (d.to || ''),
     status_changed:'moved it ' + String(d.from || '').replace('_',' ') + ' → ' + String(d.to || '').replace('_',' ') + (d.why ? ' (' + d.why + ')' : ''),
     replied:'replied', internal_note:'added a team note', client_confirmed:'confirmed it is fixed',
-    client_reopened:'said it is still a problem', slack_sent:'Slack notice sent (' + (d.kind || '') + ')', slack_resent:'resent to Slack',
+    client_reopened:'said it is still a problem', slack_sent:'Slack notice sent (' + (d.kind || '') + ')', slack_resent:'resent to Slack', slack_failed:'Slack notice failed 4 times (' + (d.error || 'unknown') + ')',
     reminder_sent: { unclaimed_1:'reminded the team nobody has taken it (1 business day)', unclaimed_2:'escalated to Jhen, still not taken (2 business days)',
       stale:'nudged ' + (d.to || 'the team') + ', no update for 3 business days' }[d.stage] || 'sent a reminder',
     auto_closed:'closed it automatically, no client reply 7 business days after it was resolved',
