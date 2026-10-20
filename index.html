@@ -948,6 +948,10 @@
   .tklog b{color:var(--ink)}
   .tkconfirm{background:#fff7e6;border:1px solid #f2d79b;border-radius:12px;padding:12px;display:grid;gap:8px}
   .tkconfirm textarea{width:100%;min-height:80px;box-sizing:border-box}
+  .tkmodal{position:fixed;inset:0;z-index:1000;background:rgba(15,23,32,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+  .tkmodal-card{background:#fff;border:0;width:100%;max-width:480px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:20px;gap:12px}
+  .tkmodal-card b:first-child{font-size:17px;color:var(--ink-dk)}
+  body.tkmodal-on{overflow:hidden}
   .tkflash{background:#dff3e9;color:#1c7c54;border-radius:10px;padding:9px 12px;font-weight:600;font-size:14px}
   .tfst.wont_do{background:#eceef1;color:#5b6270}
   .fb .tfreply{font-size:14px;color:var(--ink);border-left:3px solid #1c7c54;padding-left:9px;margin-top:8px}
@@ -2547,6 +2551,7 @@ async function tkLoad(el){
     .order('created_at', { ascending:false }).limit(500);
   if (error) { el.querySelector('#tkBody').innerHTML = '<p class="empty">Could not load tickets: ' + esc(error.message) + '</p>'; return; }
   TK_ROWS = data || [];
+  if (ME.kind === 'internal' && !TK_TEAM) { const { data: tm } = await sb.rpc('ch_ticket_team'); TK_TEAM = tm || []; }
   if (TK_PENDING) {                       // a Slack link: #tickets/<n>[/claim|/resolve]
     const p = TK_PENDING; TK_PENDING = null;
     const r = TK_ROWS.find(x => x.number === p.num);
@@ -2557,6 +2562,7 @@ async function tkLoad(el){
 
 function tkPaint(el, act){
   const box = el.querySelector('#tkBody');
+  if (!TK_OPEN || TK_VIEW === 'log') tkCloseModal();
   if (TK_VIEW === 'log') return tkPaintLog(el, box);
   if (TK_OPEN) return tkPaintDetail(el, box, TK_ROWS.find(r => r.id === TK_OPEN), act);
   const active = r => r.status !== 'resolved' && r.status !== 'closed';
@@ -2631,12 +2637,12 @@ async function tkPaintDetail(el, box, r, act){
   const tok = ++TK_PAINT;
   const staff = ME.kind === 'internal';
   act = staff ? (act || TK_ACT) : null;
-  if (staff) sb.rpc('ch_ticket_mark_viewed', { p_ticket: r.id });
+  // Supabase only sends a request once it is awaited or then'd, so a bare call never ran.
+  if (staff) sb.rpc('ch_ticket_mark_viewed', { p_ticket: r.id }).then(() => {});
   const [{ data: msgs }, ev] = await Promise.all([
     sb.from('ch_ticket_messages').select('*').eq('ticket_id', r.id).order('created_at'),
     staff ? sb.from('ch_ticket_events').select('*').eq('ticket_id', r.id).order('created_at') : Promise.resolve({ data: [] })
   ]);
-  if (staff && !TK_TEAM) { const { data: tm } = await sb.rpc('ch_ticket_team'); TK_TEAM = tm || []; }
   if (tok !== TK_PAINT) return;          // a newer paint started while this one waited
   const flash = TK_FLASH; TK_FLASH = '';
   const thread = [{ author_name: r.raised_name || 'Client', from_team: r.raised_by_team, body: r.description, created_at: r.created_at, attachments: r.attachments }]
@@ -2647,7 +2653,6 @@ async function tkPaintDetail(el, box, r, act){
     + '<div><span class="tkn">#' + r.number + '</span> <span class="tfst ' + esc(r.status) + '">' + esc(tkLabel(r.status)) + '</span>' + tkPri(r.priority)
     + '<h3>' + esc(r.subject) + '</h3><div class="tkm">' + esc(r.category) + ' · raised ' + esc(cWhen(r.created_at))
     + (r.assignee_name ? ' · with ' + esc(staff ? r.assignee_name : r.assignee_name.split(' ')[0]) : ' · not picked up yet') + '</div></div>'
-    + (act ? '<div class="tkconfirm" id="tkAct"></div>' : '')
     + (canConfirm ? '<div class="tkconfirm"><b>We think this is fixed.</b>' + (r.resolution_note ? '<div>' + esc(r.resolution_note) + '</div>' : '')
         + '<div class="tkact"><button type="button" class="btn" id="tkFixed">Confirm fixed</button>'
         + '<button type="button" class="btn ghost" id="tkStill">Still a problem</button></div></div>' : '')
@@ -2674,7 +2679,7 @@ async function tkPaintDetail(el, box, r, act){
   const fail = m => alert(m);
   // Done with a confirm box: drop it, and drop /claim or /resolve from the address so a
   // refresh does not ask again.
-  const settle = msg => { TK_ACT = null; if (msg) TK_FLASH = msg;
+  const settle = msg => { TK_ACT = null; tkCloseModal(); if (msg) TK_FLASH = msg;
     history.replaceState(null, '', location.pathname + '#tickets/' + r.number); };
   const fl = box.querySelector('#tkFlash');
   if (fl) setTimeout(() => { fl.remove(); }, 4000);
@@ -2747,7 +2752,9 @@ async function tkPaintDetail(el, box, r, act){
 
   // Confirm boxes for I'm on it and Mark resolved, from the Slack links or the page.
   // Nothing changes until the person confirms, and both run as the signed-in person.
-  const ab = box.querySelector('#tkAct');
+  // Jhen 20/10/2026: a centred pop-up the page cannot scroll behind, so it cannot be missed.
+  tkCloseModal();
+  const ab = act ? tkOpenModal() : null;
   if (ab && act) {
     const cancel = '<button type="button" class="btn ghost" id="tkActNo">Cancel</button>';
     const done = r.status === 'resolved' || r.status === 'closed';
@@ -2801,9 +2808,25 @@ async function tkPaintDetail(el, box, r, act){
     }
     const no = ab.querySelector('#tkActNo');
     if (no) no.addEventListener('click', () => { settle(''); tkPaint(el); });
-    ab.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    TK_MODAL_ESC = () => { settle(''); tkPaint(el); };
+    const first = ab.querySelector('select, textarea, #tkActGo, #tkActNo'); if (first) first.focus();
   }
 }
+
+let TK_MODAL_ESC = null;
+function tkOpenModal(){
+  const m = document.createElement('div');
+  m.className = 'tkmodal'; m.id = 'tkModal';
+  m.innerHTML = '<div class="tkconfirm tkmodal-card" id="tkAct" role="dialog" aria-modal="true"></div>';
+  document.body.appendChild(m);
+  document.body.classList.add('tkmodal-on');
+  return m.firstChild;
+}
+function tkCloseModal(){
+  const m = document.getElementById('tkModal'); if (m) m.remove();
+  document.body.classList.remove('tkmodal-on'); TK_MODAL_ESC = null;
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && TK_MODAL_ESC) TK_MODAL_ESC(); });
 
 function tkLogLine(e){
   const d = e.detail || {};
