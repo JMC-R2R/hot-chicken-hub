@@ -2642,9 +2642,11 @@ async function tkPaintDetail(el, box, r, act){
         + (staff ? '<label><input type="checkbox" id="tkInternal"> Team only note</label>' : '')
         + '<button type="button" class="btn" id="tkSendR">Send</button></div><p class="tferr" id="tkRErr" hidden></p></div>' : '')
     + (staff ? '<div class="tkact">'
-        + (!r.assignee_id && r.status !== 'resolved' && r.status !== 'closed' ? '<button type="button" class="btn" id="tkClaim">I’m on it</button>' : '')
+        + (!r.assignee_name && r.status !== 'resolved' && r.status !== 'closed' ? '<button type="button" class="btn" id="tkClaim">I’m on it</button>' : '')
         + '<select id="tkStatus">' + TK_STATUS.map(([v]) => '<option value="' + v + '"' + (v === r.status ? ' selected' : '') + '>' + esc(tkLabel(v)) + '</option>').join('') + '</select>'
-        + '<select id="tkAssign"><option value="">Nobody</option>' + TK_TEAM.map(p => '<option value="' + p.id + '"' + (p.id === r.assignee_id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>'
+        // The whole team from the Slack routing list; assigning tags them in the ticket's thread.
+        + '<select id="tkAssign" title="Assigning someone tags them in the Slack thread"><option value="">Nobody</option>' + TK_TEAM.map(p => '<option value="' + esc(p.person) + '"'
+          + (p.person === r.assignee_person ? ' selected' : '') + '>' + esc(p.name) + (p.has_login ? '' : ' (no hub login)') + '</option>').join('') + '</select>'
         + '<select id="tkPriSel">' + TK_PRI.map(([v, l]) => '<option value="' + v + '"' + (v === r.priority ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>'
         + '<button type="button" class="btn ghost" id="tkSave">Save changes</button>'
         + (ME.admin ? '<button type="button" class="btn ghost" id="tkResend">Resend to Slack</button>' : '') + '</div>'
@@ -2684,7 +2686,7 @@ async function tkPaintDetail(el, box, r, act){
   if (save) save.addEventListener('click', async () => {
     const st = box.querySelector('#tkStatus').value, who = box.querySelector('#tkAssign').value || null, pr = box.querySelector('#tkPriSel').value;
     if (pr !== r.priority) { const { error } = await sb.rpc('ch_ticket_set_priority', { p_ticket: r.id, p_priority: pr }); if (error) return fail(error.message); }
-    if ((who || null) !== (r.assignee_id || null)) { const { error } = await sb.rpc('ch_ticket_assign', { p_ticket: r.id, p_person: who }); if (error) return fail(error.message); }
+    if ((who || null) !== (r.assignee_person || null)) { const { error } = await sb.rpc('ch_ticket_assign', { p_ticket: r.id, p_person: who }); if (error) return fail(error.message); }
     if (st !== r.status) {
       let note = null;
       if (st === 'resolved' || st === 'closed') { note = prompt('What was done? This goes to the client.'); if (!note || !note.trim()) return; }
@@ -2715,7 +2717,7 @@ async function tkPaintDetail(el, box, r, act){
   if (ab && act) {
     if (!staff) { ab.remove(); }
     else if (act === 'claim') {
-      ab.innerHTML = r.assignee_id
+      ab.innerHTML = r.assignee_name
         ? '<b>' + esc(r.assignee_name) + ' already has this one.</b>'
         : '<b>Take ticket #' + r.number + '?</b><div class="tkact"><button type="button" class="btn" id="tkActGo">Yes, I’m on it</button></div>';
       const go = ab.querySelector('#tkActGo');
