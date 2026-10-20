@@ -2846,6 +2846,7 @@ function tkLogLine(e){
     status_changed:'moved it ' + String(d.from || '').replace('_',' ') + ' → ' + String(d.to || '').replace('_',' ') + (d.why ? ' (' + d.why + ')' : ''),
     replied:'replied', internal_note:'added a team note', client_confirmed:'confirmed it is fixed',
     client_reopened:'said it is still a problem', slack_sent:'Slack notice sent (' + (d.kind || '') + ')', slack_resent:'resent to Slack', slack_failed:'Slack notice failed 4 times (' + (d.error || 'unknown') + ')',
+    email_sent:'emailed the client: ' + ({ created:'ticket received', claimed:'we are on it', reply:'team reply', resolved:'resolved, please confirm', waiting:'waiting on you reminder' }[d.kind] || d.kind),
     reminder_sent: { unclaimed_1:'reminded the team nobody has taken it (1 business day)', unclaimed_2:'escalated to Jhen, still not taken (2 business days)',
       stale:'nudged ' + (d.to || 'the team') + ', no update for 3 business days' }[d.stage] || 'sent a reminder',
     auto_closed:'closed it automatically, no client reply 7 business days after it was resolved',
