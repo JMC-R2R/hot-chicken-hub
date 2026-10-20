@@ -954,6 +954,10 @@
   body.tkmodal-on{overflow:hidden}
   .tkold{display:inline-block;font-size:11px;font-weight:600;color:#55606b;background:#eef1f4;border:1px dashed #c9d1da;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:1px}
   .tkwarn{background:#fbe1e1;color:#8a1f1f;border-radius:10px;padding:9px 12px;font-size:14px}
+  .tkfiles{display:grid;gap:6px}
+  .tkfile{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#f4f8fb;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13.5px;word-break:break-all}
+  .tkfile i{color:var(--muted);font-style:normal;margin-left:6px;white-space:nowrap}
+  .tkfx{appearance:none;border:0;background:none;cursor:pointer;font-size:15px;color:#8a1f1f;padding:2px 6px}
   .tkflash{background:#dff3e9;color:#1c7c54;border-radius:10px;padding:9px 12px;font-weight:600;font-size:14px}
   .tfst.wont_do{background:#eceef1;color:#5b6270}
   .fb .tfreply{font-size:14px;color:var(--ink);border-left:3px solid #1c7c54;padding-left:9px;margin-top:8px}
@@ -2596,17 +2600,19 @@ function tkShowForm(el){
     + '<div class="tkact"><label class="fk" for="tkCat">Category</label><select id="tkCat">' + TK_CATS.map(c => '<option>' + esc(c) + '</option>').join('') + '</select>'
     + '<label class="fk" for="tkPri">Priority</label><select id="tkPri">' + TK_PRI.map(([v, l]) => '<option value="' + v + '"' + (v === 'medium' ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></div>'
     + '<p class="tkhint" id="tkPriHint">' + esc(TK_PRI[1][2]) + '</p>'
-    + '<label class="tfshot">Attachments (optional, up to 5, 8 MB each) <input type="file" id="tkFiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"></label>'
+    + '<label class="tfshot">Add attachments (optional, up to 5, 8 MB each) <input type="file" id="tkFiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"></label>'
+    + '<div class="tkfiles" id="tkFilesList"></div>'
     + '<p class="tferr" id="tkErr" hidden></p><div><button type="submit" class="btn" id="tkSend">Send ticket</button></div></form>';
   const pri = fb.querySelector('#tkPri');
   pri.addEventListener('change', () => { fb.querySelector('#tkPriHint').textContent = TK_PRI.find(p => p[0] === pri.value)[2]; });
+  const pick = tkPicker(fb, 'tkFiles', fb.querySelector('#tkErr'));
   fb.querySelector('#tkForm').addEventListener('submit', async e => {
     e.preventDefault();
     const err = fb.querySelector('#tkErr'); err.hidden = true;
     const subject = fb.querySelector('#tkSubj').value.trim(), desc = fb.querySelector('#tkDesc').value.trim();
     if (!subject || !desc) { err.textContent = 'Add a subject and tell us what you need.'; err.hidden = false; return; }
     const btn = fb.querySelector('#tkSend'); btn.disabled = true; btn.textContent = 'Sending…';
-    const files = await tkUpload(fb.querySelector('#tkFiles').files, err);
+    const files = await tkUpload(pick.files, err);
     if (files === null) { btn.disabled = false; btn.textContent = 'Send ticket'; return; }
     const { data: num, error } = await sb.rpc('ch_ticket_create', { p_client: CLIENT_ID, p_subject: subject, p_description: desc,
       p_category: fb.querySelector('#tkCat').value, p_priority: pri.value, p_attachments: files });
@@ -2618,6 +2624,32 @@ function tkShowForm(el){
 }
 
 // Upload to hub-tickets/<client_id>/<random>/<file>. Returns paths, or null after showing an error.
+// Attachments add up across picks (Jhen 20/10/2026: choosing again used to replace the first
+// choice), each with a remove button. Limits are checked here and again in tkUpload.
+function tkPicker(root, id, errEl){
+  const input = root.querySelector('#' + id), list = root.querySelector('#' + id + 'List');
+  const st = { files: [] };
+  if (!input || !list) return st;
+  const size = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  const paint = () => {
+    list.innerHTML = st.files.map((f, i) => '<div class="tkfile"><span>' + esc(f.name) + ' <i>' + size(f.size) + '</i></span>'
+      + '<button type="button" class="tkfx" data-i="' + i + '" aria-label="Remove ' + esc(f.name) + '">✕</button></div>').join('');
+    list.querySelectorAll('[data-i]').forEach(b => b.addEventListener('click', () => { st.files.splice(+b.dataset.i, 1); paint(); }));
+  };
+  input.addEventListener('change', () => {
+    const msgs = [];
+    [...input.files].forEach(f => {
+      if (f.size > 8 * 1048576) msgs.push(f.name + ' is over 8 MB, so it was left off.');
+      else if (st.files.length >= 5) msgs.push('Up to 5 attachments, so ' + f.name + ' was left off.');
+      else if (!st.files.some(x => x.name === f.name && x.size === f.size)) st.files.push(f);
+    });
+    input.value = '';
+    if (errEl) { errEl.textContent = msgs.join(' '); errEl.hidden = !msgs.length; }
+    paint();
+  });
+  return st;
+}
+
 async function tkUpload(list, err){
   const files = [...(list || [])];
   if (files.length > 5) { err.textContent = 'Up to 5 attachments, please.'; err.hidden = false; return null; }
@@ -2669,7 +2701,8 @@ async function tkPaintDetail(el, box, r, act){
         + '<div class="who">' + esc(m.author_name || '') + (m.internal ? ' · Team only' : m.from_team ? ' · Ready to Rank' : '') + ' · ' + esc(cWhen(m.created_at)) + '</div>'
         + '<div class="txt">' + esc(m.body) + '</div>' + (m.attachments && m.attachments.length ? '<div>' + tkFileLinks(m.attachments) + '</div>' : '') + '</div>').join('') + '</div>'
     + (r.status !== 'closed' || staff ? '<div><textarea id="tkReply" maxlength="8000" placeholder="' + (staff ? 'Reply to the client' : 'Reply to the team') + '"></textarea>'
-        + '<div class="tkact"><label class="tfshot">Attach <input type="file" id="tkRFiles" multiple></label>'
+        + '<div class="tkfiles" id="tkRFilesList"></div>'
+        + '<div class="tkact"><label class="tfshot">Attach files (up to 5) <input type="file" id="tkRFiles" multiple></label>'
         + (staff ? '<label><input type="checkbox" id="tkInternal"> Team only note</label>' : '')
         + '<button type="button" class="btn" id="tkSendR">Send</button></div><p class="tferr" id="tkRErr" hidden></p></div>' : '')
     + (staff ? '<div class="tkact">'
@@ -2700,13 +2733,14 @@ async function tkPaintDetail(el, box, r, act){
     if (ue || !u) { if (w) w.close(); fail('Could not open that file.'); return; }
     if (w) w.location = u.signedUrl; else location.href = u.signedUrl;
   }));
+  const rpick = tkPicker(box, 'tkRFiles', box.querySelector('#tkRErr'));
   const sendR = box.querySelector('#tkSendR');
   if (sendR) sendR.addEventListener('click', async () => {
     const err = box.querySelector('#tkRErr'); err.hidden = true;
     const body = box.querySelector('#tkReply').value.trim();
     if (!body) { err.textContent = 'Write a reply first.'; err.hidden = false; return; }
     sendR.disabled = true;
-    const files = await tkUpload(box.querySelector('#tkRFiles').files, err);
+    const files = await tkUpload(rpick.files, err);
     if (files === null) { sendR.disabled = false; return; }
     const internal = !!(box.querySelector('#tkInternal') || {}).checked;
     const { error } = await sb.rpc('ch_ticket_reply', { p_ticket: r.id, p_body: body, p_internal: internal, p_attachments: files });
