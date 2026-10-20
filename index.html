@@ -2728,7 +2728,9 @@ async function tkPaintDetail(el, box, r, act){
   autosave('#tkStatus', r.status, v => {
     let note = null;
     if (v === 'resolved' || v === 'closed') {
-      note = prompt('What was done? This goes to the client.');
+      note = prompt(v === 'resolved'
+        ? 'We\'ll let the client know it\'s sorted and ask them to confirm. Add a quick note on what you did, in plain English.'
+        : 'This closes the ticket without asking the client to confirm. Add a quick note for the client on why, in plain English.');
       if (!note || !note.trim()) return false;
     }
     return sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: v, p_note: note });
@@ -2792,8 +2794,8 @@ async function tkPaintDetail(el, box, r, act){
       ab.innerHTML = done
         ? doneMsg
         : '<b>Mark ticket #' + r.number + ' as resolved?</b>'
-          + '<div>The client is told it is fixed and asked to confirm. Say what was done, in words the client will understand.</div>'
-          + '<textarea id="tkActNote" maxlength="2000" placeholder="What was done? This goes to the client."></textarea>'
+          + '<div>We’ll let the client know it’s sorted and ask them to confirm. Add a quick note on what you did, in plain English.</div>'
+          + '<textarea id="tkActNote" maxlength="2000" placeholder="For example: Updated your opening hours on the Contact page."></textarea>'
           + '<div class="tkact"><button type="button" class="btn" id="tkActGo" disabled>Yes, mark resolved</button>' + cancel + '</div>';
       const note = ab.querySelector('#tkActNote'), go = ab.querySelector('#tkActGo');
       if (note) note.addEventListener('input', () => { go.disabled = !note.value.trim(); });
