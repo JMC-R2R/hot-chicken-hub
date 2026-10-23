@@ -2071,11 +2071,16 @@ function expandTabs(){
     intro: ME.kind === 'internal'
       ? 'Every ticket this client has raised. Take one with I’m on it, keep the client posted in the thread, and resolve it with a note saying what was done.'
       : 'Need something changed or fixed? Raise a ticket and the team is notified straight away. You can follow every ticket here, and reply to the team on it.' });
-  // Jhen 23/10/2026: ad hoc suggestions the client approves, replacing Monday and Lovable.
-  if (CFG.suggestions) out.push({ key:'suggestions', audience:'all', enabled:true, title:'Suggestions', short:'Suggestions',
-    intro: ME.kind === 'internal'
-      ? 'Ideas for this client that sit outside the monthly plan. Add one with a time frame, and Jhen, Jose or Janice release it to the client. Once it is approved, pick it up, and mark it done with proof.'
-      : 'Extra ideas from our team for your business. Approve the ones you like, tell us if you would like changes, or decline. We let you know when each one is done.' });
+  // Jhen 23/10/2026: ad hoc recommendations the client approves, replacing Monday and Lovable.
+  // Named "Our recommendations" so a client reads it as ours, not a suggestion box, and placed
+  // straight after the Content plan (Jhen 23/10/2026).
+  if (CFG.suggestions) {
+    let at = -1; out.forEach((x, i) => { if (x.monthKey !== undefined) at = i; });
+    out.splice(at + 1 || out.length, 0, { key:'suggestions', audience:'all', enabled:true, title:'Our recommendations', short:'Our recommendations',
+      intro: ME.kind === 'internal'
+        ? 'Ideas for this client that sit outside the monthly plan. Add one with a time frame, and Jhen, Jose or Janice release it to the client. Once it is approved, pick it up, and mark it done with proof.'
+        : 'Ideas from our team to help your business, outside your monthly plan. Approve the ones you like, ask for changes, or decline. We will let you know when each one is done.' });
+  }
   // One number per tab BUTTON: every month shares the Content plan tab's number.
   let n = 0, planNum = null;
   out.forEach(t => {
@@ -2986,7 +2991,7 @@ function sgDue(r){
 }
 
 function suggestionsMarkup(){
-  return '<div class="tkbar">' + (sgStaff() ? '<button type="button" class="btn" id="sgNew">Add suggestion</button>' : '')
+  return '<div class="tkbar">' + (sgStaff() ? '<button type="button" class="btn" id="sgNew">Add a recommendation</button>' : '')
     + '<span class="grow"></span></div><div id="sgFormBox"></div><div id="sgBody"><p class="empty">Loading…</p></div>';
 }
 
@@ -3000,7 +3005,7 @@ async function sgLoad(el){
   if (!SG_ME) { const { data } = await sb.rpc('ch_sugg_me'); SG_ME = data || {}; }
   if (sgStaff() && !SG_TEAM) { const { data: tm } = await sb.rpc('ch_ticket_team'); SG_TEAM = tm || []; }
   const { data, error } = await sb.rpc('ch_sugg_list', { p_client: CLIENT_ID });
-  if (error) { el.querySelector('#sgBody').innerHTML = '<p class="empty">Could not load suggestions: ' + esc(error.message) + '</p>'; return; }
+  if (error) { el.querySelector('#sgBody').innerHTML = '<p class="empty">Could not load recommendations: ' + esc(error.message) + '</p>'; return; }
   // Staff previewing the client view get every row from the database, so trim to what the client sees.
   SG_ROWS = (data || []).filter(r => sgStaff() || !['draft','sent_back'].includes(r.status));
   if (SG_PENDING) {
@@ -3040,7 +3045,7 @@ function sgPaint(el){
         : '<div class="tkm">' + esc(cWhen(r.released_at || r.created_at)) + '</div>')
       + '</div>').join('') + '</div>';
   });
-  box.innerHTML = h || '<p class="empty">' + (sgStaff() ? 'No suggestions yet. Add one with the button above.' : 'Nothing to approve right now.') + '</p>';
+  box.innerHTML = h || '<p class="empty">' + (sgStaff() ? 'No recommendations yet. Add one with the button above.' : 'Nothing to approve right now.') + '</p>';
   box.querySelectorAll('[data-sgo]').forEach(d => d.addEventListener('click', () => {
     SG_OPEN = d.dataset.sgo; const r = SG_ROWS.find(x => x.id === SG_OPEN);
     if (r) history.replaceState(null, '', location.pathname + '#suggestions/' + r.number);
@@ -3070,11 +3075,11 @@ function sgReadFields(root){
 function sgShowForm(el){
   const fb = el.querySelector('#sgFormBox');
   if (fb.innerHTML) { fb.innerHTML = ''; return; }
-  fb.innerHTML = '<form class="tkform" id="sgForm" novalidate><h3>Add a suggestion</h3>'
+  fb.innerHTML = '<form class="tkform" id="sgForm" novalidate><h3>Add a recommendation</h3>'
     + '<p class="tkhint">The client does not see it until Jhen, Jose or Janice releases it.</p>' + sgFormFields()
     + '<label class="tfshot">Add files (optional, up to 5, 8 MB each) <input type="file" id="sgFiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"></label>'
     + '<div class="tkfiles" id="sgFilesList"></div>'
-    + '<p class="sgerr" id="sgErr" hidden></p><div><button type="submit" class="btn" id="sgSend">Add suggestion</button></div></form>';
+    + '<p class="sgerr" id="sgErr" hidden></p><div><button type="submit" class="btn" id="sgSend">Add recommendation</button></div></form>';
   const pick = tkPicker(fb, 'sgFiles', fb.querySelector('#sgErr'));
   fb.querySelector('#sgForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -3084,10 +3089,10 @@ function sgShowForm(el){
     if (!(f.frame_days >= 1 && f.frame_days <= 60)) { err.textContent = 'Add a time frame of 1 to 60 business days. It sets the due date when the client approves.'; err.hidden = false; return; }
     const btn = fb.querySelector('#sgSend'); btn.disabled = true; btn.textContent = 'Adding…';
     const files = await sgUpload(pick.files, err);
-    if (files === null) { btn.disabled = false; btn.textContent = 'Add suggestion'; return; }
+    if (files === null) { btn.disabled = false; btn.textContent = 'Add recommendation'; return; }
     const { data: num, error } = await sb.rpc('ch_sugg_create', { p_client: CLIENT_ID, p_title: f.title, p_what: f.what, p_why: f.why,
       p_client_note: f.client_note, p_links: f.links, p_attachments: files, p_frame: f.frame_days });
-    btn.disabled = false; btn.textContent = 'Add suggestion';
+    btn.disabled = false; btn.textContent = 'Add recommendation';
     if (error) { err.textContent = 'Not added: ' + error.message; err.hidden = false; return; }
     fb.innerHTML = '<p class="tkhint">S-' + num + ' is in. Jhen and Jose have been asked to review it.</p>';
     SG_OPEN = null; sgLoad(el);
@@ -3143,7 +3148,7 @@ async function sgPaintDetail(el, box, r){
     + '<div>If you would like anything changed, write it in the message box below and we will pick it up.</div>'
     + '<div class="tkact">' + btn('sgAllGood', 'All good') + '</div></div>';
 
-  box.innerHTML = '<div class="tkdetail"><div><a href="#" id="sgBackLink">← All suggestions</a></div>'
+  box.innerHTML = '<div class="tkdetail"><div><a href="#" id="sgBackLink">← All recommendations</a></div>'
     + (flash ? '<div class="tkflash" id="sgFlash">' + esc(flash) + '</div>' : '')
     + (preview ? '<div class="tkwarn">Client preview: the buttons here are the client’s and do nothing for staff.</div>' : '')
     + '<div><span class="tkn">S-' + r.number + '</span> ' + sgPill(r.status) + '<h3>' + esc(r.title) + '</h3>'
@@ -3317,14 +3322,14 @@ function sgModal(el, r, kind, msg){
       + note('For example: Covered by S-12, so closing this one.', true) + go('Yes, close it', true);
     needText = true; submit = async t => sb.rpc('ch_sugg_close', { p_sugg: r.id, p_note: t });
   } else if (kind === 'approve') {
-    ab.innerHTML = '<b>Approve this suggestion?</b><div>' + esc(r.title) + '</div><div>We will get started and let you know when it is done.</div>' + go('Yes, approve');
+    ab.innerHTML = '<b>Approve this recommendation?</b><div>' + esc(r.title) + '</div><div>We will get started and let you know when it is done.</div>' + go('Yes, approve');
     submit = async () => sb.rpc('ch_sugg_client_decide', { p_sugg: r.id, p_decision: 'approve', p_note: null });
   } else if (kind === 'changes') {
     ab.innerHTML = '<b>Approve with changes</b><div>Tell us what you would like different and we will go ahead with that.</div>'
       + note('For example: Only on the hot water page, not every page.', true) + go('Approve with these changes', true);
     needText = true; submit = async t => sb.rpc('ch_sugg_client_decide', { p_sugg: r.id, p_decision: 'approve_changes', p_note: t });
   } else if (kind === 'decline') {
-    ab.innerHTML = '<b>Decline this suggestion?</b><div>No problem. A reason helps us suggest better next time.</div>'
+    ab.innerHTML = '<b>Decline this recommendation?</b><div>No problem. A reason helps us suggest better next time.</div>'
       + note('For example: We run specials on Instagram only.', false) + go('Decline');
     submit = async t => sb.rpc('ch_sugg_client_decide', { p_sugg: r.id, p_decision: 'decline', p_note: t || null });
   } else if (kind === 'send') {
