@@ -803,6 +803,9 @@
     .pgframe .pg-trust ul{justify-content:flex-start;flex-direction:column}
   }
   .artside{border-left:1px solid #e3e8ee;background:#fafbfc;overflow:auto;padding:14px}
+  .artqc{margin:0 0 16px}
+  .artqc .qcrow{margin-top:0;padding:10px 12px}
+  .artqc .qcrow .qcbtns{flex-wrap:wrap}
   .artside h4{margin:2px 2px 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5d6b79}
   .artside .showres{font-size:12.5px;color:#5d6b79;display:flex;gap:6px;align-items:center;margin:0 2px 12px}
   .artlog{margin-top:18px;padding-top:14px;border-top:1px solid #e3e8ee}
@@ -1277,7 +1280,7 @@
       <button class="artx" type="button" id="artClose" aria-label="Close">&times;</button></div>
     <div class="artmain">
       <article class="artbody" id="artBody"></article>
-      <aside class="artside"><h4>Comments</h4>
+      <aside class="artside"><section class="artqc" id="artQC" hidden></section><h4>Comments</h4>
         <label class="showres"><input type="checkbox" id="artShowRes"> Show resolved</label>
         <div id="artComments"></div>
         <section class="artlog" id="artLog" hidden><h4>Change log <span class="adm-only">Admins only</span></h4>
@@ -1605,8 +1608,84 @@ async function openArticle(itemId, keepScroll){
       .then(({ count }) => { if (ART && ART.id === itemId) $('artUndo').hidden = !count; });
   }
   loadArticleLog(itemId);
+  loadArtQC(itemId, data.version);
   await loadComments();
   htReader();
+}
+
+/* QC inside Read & comment (Jhen 10/11/2026): the same automatic check, ticks, note and buttons
+   as the card, beside the blog, so the reviewer reads, fixes and ticks without closing it.
+   Suggest edit and Undo reopen the article, which reloads this with the new version. */
+async function loadArtQC(itemId, ver){
+  const box = $('artQC'), it = ITEMS.find(x => x.id === itemId);
+  if (!ME || ME.kind !== 'internal' || !it || it.stream !== 'blog' || it.deliverable === 'linkedin_article') { box.hidden = true; box.innerHTML = ''; return; }
+  if (ARTICLES[itemId]) ARTICLES[itemId].version = ver;
+  const [x, q] = await Promise.all([
+    sb.from('ch_article_auto_checks').select('item_id,article_version,results,failed,checked_at').eq('item_id', itemId).maybeSingle(),
+    sb.from('ch_qc_checklists').select('item_id,article_version,checks,note,checked_name,checked_at').eq('item_id', itemId).maybeSingle()
+  ]);
+  if (!ART || ART.id !== itemId) return;
+  if (x.data) AUTOCHECKS[itemId] = x.data;
+  if (q.data) QCCHECKS[itemId] = q.data;
+  renderArtQC(itemId);
+}
+function renderArtQC(id){
+  const box = $('artQC'), a = ARTICLES[id];
+  if (!a) { box.hidden = true; return; }
+  box.hidden = false;
+  if (a.released_at || a.qc_status === 'approved') {
+    box.innerHTML = '<h4>QC</h4><p class="qcsc">' + (a.released_at ? 'With the client.' : 'QC approved by ' + esc(a.qc_name || '') + '.') + '</p>';
+    return;
+  }
+  const can = ME.admin === true, sid = esc(id);
+  box.innerHTML = '<h4>QC</h4><div class="qcrow">' + qcAutoHtml(id) + qcListHtml(id, can)
+    + (can ? '<div class="qcbtns"><button class="btn qcok" type="button" data-artqcok="' + sid + '"' + (qcAllTicked(id) ? '' : ' disabled title="Tick all 10 QC items first"') + '>QC approve</button>'
+           + '<button class="btn ghost" type="button" data-artqcback="' + sid + '">Send back</button></div>'
+           + '<div class="qcbox hide" data-artqcbox="' + sid + '"><textarea data-artqcnote="' + sid + '" rows="2" placeholder="What should the writer change?"></textarea>'
+           + '<div><button class="btn" type="button" data-artqcsend="' + sid + '">Send back</button></div></div>' : '')
+    + '</div>';
+  box.querySelectorAll('[data-qcnotetext]').forEach(ta => ta.addEventListener('input', () => { QCNOTES[id] = ta.value; }));
+  box.querySelectorAll('[data-qctick]').forEach(cb => cb.addEventListener('change', () => {
+    qcTicks(id)[cb.dataset.qckey] = cb.checked;
+    const done = QCITEMS.filter(i => qcTicks(id)[i.key] === true).length;
+    const c = box.querySelector('[data-qccount]'); if (c) c.textContent = done + ' of ' + QCITEMS.length + ' ticked';
+    const ok = box.querySelector('[data-artqcok]');
+    if (ok) { ok.disabled = !qcAllTicked(id); ok.title = ok.disabled ? 'Tick all 10 QC items first' : ''; }
+  }));
+  const ok = box.querySelector('[data-artqcok]');
+  if (ok) ok.addEventListener('click', async () => {
+    if (!qcAllTicked(id)) { badge('Tick all 10 QC items first.','err'); return; }
+    ok.disabled = true; badge('Saving…');
+    const qnote = (QCNOTES[id] || '').trim();
+    let { error } = await sb.rpc('ch_qc_checklist_save', { p_item_id: id, p_checks: qcTicks(id), p_note: qnote || null });
+    let data = null;
+    if (!error) {
+      QCCHECKS[id] = { item_id: id, article_version: a.version, checks: Object.assign({}, qcTicks(id)), note: qnote, checked_name: ME.name, checked_at: new Date().toISOString() };
+      ({ data, error } = await sb.rpc('ch_qc_article_checked', { p_item_id: id }));
+    }
+    if (error) { ok.disabled = false; badge(error.message || 'Could not save QC.','err'); return; }
+    Object.assign(a, { qc_status:'approved', qc_name: ME.name, qc_at: new Date().toISOString(), qc_note: null });
+    const it = ITEMS.find(x => x.id === id); if (it) it.review_on = data;
+    badge('QC approved. Goes to the client on ' + ausDate(data),'ok');
+    renderArtQC(id);
+  });
+  const back = box.querySelector('[data-artqcback]');
+  if (back) back.addEventListener('click', () => {
+    box.querySelector('[data-artqcbox]').classList.remove('hide'); box.querySelector('[data-artqcnote]').focus();
+  });
+  const send = box.querySelector('[data-artqcsend]');
+  if (send) send.addEventListener('click', async () => {
+    const note = (box.querySelector('[data-artqcnote]').value || '').trim();
+    if (note.length < 3) { badge('Say what needs changing.','err'); return; }
+    send.disabled = true; badge('Saving…');
+    const { error } = await sb.rpc('ch_qc_article', { p_item_id: id, p_approve: false, p_note: note });
+    send.disabled = false;
+    if (error) { badge(error.message || 'Could not save QC.','err'); return; }
+    Object.assign(a, { qc_status:'changes', qc_name: ME.name, qc_at: new Date().toISOString(), qc_note: note });
+    const it = ITEMS.find(x => x.id === id); if (it) it.review_on = null;
+    badge('Sent back. The writer will revise it.','ok');
+    box.innerHTML = '<h4>QC</h4><p class="qcsc">Sent back by ' + esc(ME.name) + ': “' + esc(note) + '”</p>';
+  });
 }
 
 /* Change log for the open article: who changed what and when. Hub admins only. The events
