@@ -1153,6 +1153,7 @@
   .qcrow .qcitem{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
   .qcrow .qcitem input{margin-top:3px;width:16px;height:16px;flex:none}
   .qcrow .btn.qcok:disabled{opacity:.45;cursor:not-allowed}
+  .qcrow .btn.qcok[data-qcwait]{opacity:.55}
   .qcrow .qcnotelbl{display:grid;gap:4px;margin-top:4px;font-weight:600}
   .qcrow .qcnotelbl textarea{width:100%;font:inherit;font-weight:400;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px}
   .qcrow .qcbox textarea{width:100%;font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--line);border-radius:9px}
@@ -1639,7 +1640,7 @@ function renderArtQC(id){
   }
   const can = ME.admin === true, sid = esc(id);
   box.innerHTML = '<h4>QC</h4><div class="qcrow">' + qcAutoHtml(id) + qcListHtml(id, can)
-    + (can ? '<div class="qcbtns"><button class="btn qcok" type="button" data-artqcok="' + sid + '"' + (qcAllTicked(id) ? '' : ' disabled title="Tick all 10 QC items first"') + '>QC approve</button>'
+    + (can ? '<div class="qcbtns"><button class="btn qcok" type="button" data-artqcok="' + sid + '"' + (qcAllTicked(id) ? '' : ' data-qcwait="1"') + '>QC approve</button>'
            + '<button class="btn ghost" type="button" data-artqcback="' + sid + '">Send back</button></div>'
            + '<div class="qcbox hide" data-artqcbox="' + sid + '"><textarea data-artqcnote="' + sid + '" rows="2" placeholder="What should the writer change?"></textarea>'
            + '<div><button class="btn" type="button" data-artqcsend="' + sid + '">Send back</button></div></div>' : '')
@@ -1650,11 +1651,11 @@ function renderArtQC(id){
     const done = QCITEMS.filter(i => qcTicks(id)[i.key] === true).length;
     const c = box.querySelector('[data-qccount]'); if (c) c.textContent = done + ' of ' + QCITEMS.length + ' ticked';
     const ok = box.querySelector('[data-artqcok]');
-    if (ok) { ok.disabled = !qcAllTicked(id); ok.title = ok.disabled ? 'Tick all 10 QC items first' : ''; }
+    if (ok) { if (qcAllTicked(id)) ok.removeAttribute('data-qcwait'); else ok.setAttribute('data-qcwait', '1'); }
   }));
   const ok = box.querySelector('[data-artqcok]');
   if (ok) ok.addEventListener('click', async () => {
-    if (!qcAllTicked(id)) { badge('Tick all 10 QC items first.','err'); return; }
+    if (!qcAllTicked(id)) { badge(qcMissingMsg(id),'err'); return; }
     ok.disabled = true; badge('Saving…');
     const qnote = (QCNOTES[id] || '').trim();
     let { error } = await sb.rpc('ch_qc_checklist_save', { p_item_id: id, p_checks: qcTicks(id), p_note: qnote || null });
@@ -3912,6 +3913,11 @@ function qcRefreshAfterClose(id){
   if (t) refreshMonth(t);
 }
 const qcAllTicked = id => QCITEMS.length > 0 && QCITEMS.every(i => qcTicks(id)[i.key] === true);
+const qcMissingMsg = id => {
+  if (!QCITEMS.length) return 'The QC checklist did not load. Refresh the page.';
+  const m = QCITEMS.filter(i => qcTicks(id)[i.key] !== true).map(i => i.label);
+  return 'Tick all ' + QCITEMS.length + ' QC items first. Still open: ' + m.join(', ') + '.';
+};
 function qcAutoHtml(id){
   const x = AUTOCHECKS[id], a = ARTICLES[id];
   if (!x) return '<div class="qcauto"><b>Automatic check:</b> not run yet. It runs whenever the blog is saved.</div>';
@@ -3957,7 +3963,7 @@ function qcPanel(r, staff){
     + send
     + (!li && a.qc_status !== 'approved' ? qcAutoHtml(r.id) + qcListHtml(r.id, can) : '')
     + (can && a.qc_status !== 'approved'
-        ? '<div class="qcbtns"><button class="btn qcok" type="button" data-qcok="' + id + '"' + (!li && !qcAllTicked(r.id) ? ' disabled title="Tick all 10 QC items first"' : '') + '>QC approve</button>'
+        ? '<div class="qcbtns"><button class="btn qcok" type="button" data-qcok="' + id + '"' + (!li && !qcAllTicked(r.id) ? ' data-qcwait="1"' : '') + '>QC approve</button>'
           + '<button class="btn ghost" type="button" data-qcback="' + id + '">Send back</button></div>'
         : (can ? '<div class="qcbtns"><button class="btn ghost" type="button" data-qcback="' + id + '">Send back</button></div>' : ''))
     + '<div class="qcbox hide" data-qcbox="' + id + '"><textarea data-qcnote="' + id + '" rows="2" placeholder="What should the writer change?"></textarea>'
@@ -5224,7 +5230,7 @@ function wireMonthBrief(el, t){
     const done = QCITEMS.filter(i => qcTicks(id)[i.key] === true).length;
     const c = el.querySelector('[data-qccount="' + id + '"]'); if (c) c.textContent = done + ' of ' + QCITEMS.length + ' ticked';
     const ok = el.querySelector('[data-qcok="' + id + '"]');
-    if (ok) { ok.disabled = !qcAllTicked(id); ok.title = ok.disabled ? 'Tick all 10 QC items first' : ''; }
+    if (ok) { if (qcAllTicked(id)) ok.removeAttribute('data-qcwait'); else ok.setAttribute('data-qcwait', '1'); }
   }));
   el.querySelectorAll('[data-qcok]').forEach(b => b.addEventListener('click', async () => {
     const id = b.dataset.qcok; b.disabled = true; badge('Saving…');
@@ -5232,7 +5238,7 @@ function wireMonthBrief(el, t){
     const isBlog = !!qit && qit.deliverable !== 'linkedin_article';
     let data, error;
     if (isBlog) {
-      if (!qcAllTicked(id)) { badge('Tick all 10 QC items first.','err'); b.disabled = false; return; }
+      if (!qcAllTicked(id)) { badge(qcMissingMsg(id),'err'); b.disabled = false; return; }
       const qnote = (QCNOTES[id] || '').trim();
       ({ error } = await sb.rpc('ch_qc_checklist_save', { p_item_id: id, p_checks: qcTicks(id), p_note: qnote || null }));
       if (!error) {
