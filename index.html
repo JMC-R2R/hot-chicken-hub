@@ -1150,6 +1150,8 @@
   .qcrow .qcitem{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
   .qcrow .qcitem input{margin-top:3px;width:16px;height:16px;flex:none}
   .qcrow .btn.qcok:disabled{opacity:.45;cursor:not-allowed}
+  .qcrow .qcnotelbl{display:grid;gap:4px;margin-top:4px;font-weight:600}
+  .qcrow .qcnotelbl textarea{width:100%;font:inherit;font-weight:400;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px}
   .qcrow .qcbox textarea{width:100%;font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--line);border-radius:9px}
 
   /* ---------- reporting dashboard, inside the hub ---------- */
@@ -1548,7 +1550,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('gbpMod
    Author and name are set by ch_add_comment from the session, never sent by the page. */
 let ARTICLES = {}, OPENCOMMENTS = {}, ART = null, ARTCOMMENTS = [], PENDINGSEL = null;
 // QC checklist (Jhen 10/11/2026): the 10 human ticks per blog, the automatic check, and unsaved ticks.
-let QCCHECKS = {}, AUTOCHECKS = {}, QCITEMS = [], QCTICKS = {};
+let QCCHECKS = {}, AUTOCHECKS = {}, QCITEMS = [], QCTICKS = {}, QCTICKVER = {}, QCNOTES = {};
 
 async function loadArticleIndex(){
   const [a, c] = await Promise.all([
@@ -1560,7 +1562,7 @@ async function loadArticleIndex(){
   (c.data || []).forEach(r => { if (r.status === 'open') OPENCOMMENTS[r.item_id] = (OPENCOMMENTS[r.item_id] || 0) + 1; });
   if (ME && ME.kind === 'internal') {
     const [q, x, li] = await Promise.all([
-      sb.from('ch_qc_checklists').select('item_id,article_version,checks,checked_name,checked_at').eq('client_id', CLIENT_ID),
+      sb.from('ch_qc_checklists').select('item_id,article_version,checks,note,checked_name,checked_at').eq('client_id', CLIENT_ID),
       sb.from('ch_article_auto_checks').select('item_id,article_version,results,failed,checked_at').eq('client_id', CLIENT_ID),
       QCITEMS.length ? { data: QCITEMS } : sb.rpc('ch_qc_checklist_items')
     ]);
@@ -1674,9 +1676,10 @@ document.querySelectorAll('#artDev [data-dev]').forEach(b => b.addEventListener(
 }));
 
 function closeArticle(){
+  const qcId = ART ? ART.id : null;
   $('artModal').hidden = true; document.body.style.overflow = '';
   hideSel(); $('cForm').hidden = true; $('eForm').hidden = true; ART = null;
-  loadArticleIndex().then(updateReadBadges);
+  loadArticleIndex().then(() => { updateReadBadges(); qcRefreshAfterClose(qcId); });
 }
 
 // Keep the open-comment count on each card in step without rebuilding the month.
@@ -3810,11 +3813,24 @@ function blogStage(r){
    Ticks are saved against the article version, so an edit after QC means ticking again.
    The automatic check (ch_article_auto_checks) lists the measurable items above the ticks. */
 function qcTicks(id){
+  const a = ARTICLES[id];
+  if (QCTICKS[id] && a && QCTICKVER[id] !== a.version) { delete QCTICKS[id]; delete QCNOTES[id]; }
   if (!QCTICKS[id]) {
-    const saved = QCCHECKS[id], a = ARTICLES[id];
-    QCTICKS[id] = (saved && a && saved.article_version === a.version) ? Object.assign({}, saved.checks) : {};
+    const saved = QCCHECKS[id];
+    const same = saved && a && saved.article_version === a.version;
+    QCTICKS[id] = same ? Object.assign({}, saved.checks) : {};
+    if (QCNOTES[id] === undefined) QCNOTES[id] = same ? (saved.note || '') : '';
+    QCTICKVER[id] = a ? a.version : null;
   }
   return QCTICKS[id];
+}
+// After the article modal closes (Suggest edit saves a new version), redraw that card so the
+// automatic check and the ticks show the blog as it is now.
+function qcRefreshAfterClose(id){
+  if (!id || !ME || ME.kind !== 'internal') return;
+  const it = ITEMS.find(x => x.id === id);
+  const t = it && TABLIST.find(x => x.monthKey === it.month_key);
+  if (t) refreshMonth(t);
 }
 const qcAllTicked = id => QCITEMS.length > 0 && QCITEMS.every(i => qcTicks(id)[i.key] === true);
 function qcAutoHtml(id){
@@ -3836,6 +3852,9 @@ function qcListHtml(id, can){
   return '<div class="qclist" data-qclist="' + esc(id) + '"><div><b>QC checklist</b> <span class="qcsc" data-qccount="' + esc(id) + '">' + done + ' of ' + QCITEMS.length + ' ticked</span></div>' + note
     + QCITEMS.map(i => '<label class="qcitem"><input type="checkbox" data-qctick="' + esc(id) + '" data-qckey="' + esc(i.key) + '"'
         + (t[i.key] === true ? ' checked' : '') + (can ? '' : ' disabled') + '><span><b>' + esc(i.label) + ':</b> ' + esc(i.help) + '</span></label>').join('')
+    + '<label class="qcnotelbl">QC note <span class="qcsc">(optional, team only, saved with your ticks)</span>'
+    + '<textarea data-qcnotetext="' + esc(id) + '" rows="2" placeholder="e.g. Keyword count kept lower on purpose, it reads better."' + (can ? '' : ' disabled') + '>'
+    + esc(QCNOTES[id] || '') + '</textarea></label>'
     + '</div>';
 }
 
@@ -5117,6 +5136,9 @@ function wireMonthBrief(el, t){
 
   el.querySelectorAll('[data-read]').forEach(b => b.addEventListener('click', () => openArticle(b.dataset.read)));
   el.querySelectorAll('[data-wppack]').forEach(b => b.addEventListener('click', () => buildWpPack(b.dataset.wppack, b)));
+  el.querySelectorAll('[data-qcnotetext]').forEach(ta => ta.addEventListener('input', () => {
+    QCNOTES[ta.dataset.qcnotetext] = ta.value;
+  }));
   el.querySelectorAll('[data-qctick]').forEach(cb => cb.addEventListener('change', () => {
     const id = cb.dataset.qctick;
     qcTicks(id)[cb.dataset.qckey] = cb.checked;
@@ -5132,9 +5154,10 @@ function wireMonthBrief(el, t){
     let data, error;
     if (isBlog) {
       if (!qcAllTicked(id)) { badge('Tick all 10 QC items first.','err'); b.disabled = false; return; }
-      ({ error } = await sb.rpc('ch_qc_checklist_save', { p_item_id: id, p_checks: qcTicks(id) }));
+      const qnote = (QCNOTES[id] || '').trim();
+      ({ error } = await sb.rpc('ch_qc_checklist_save', { p_item_id: id, p_checks: qcTicks(id), p_note: qnote || null }));
       if (!error) {
-        QCCHECKS[id] = { item_id: id, article_version: ARTICLES[id].version, checks: Object.assign({}, qcTicks(id)), checked_name: ME.name, checked_at: new Date().toISOString() };
+        QCCHECKS[id] = { item_id: id, article_version: ARTICLES[id].version, checks: Object.assign({}, qcTicks(id)), note: qnote, checked_name: ME.name, checked_at: new Date().toISOString() };
         ({ data, error } = await sb.rpc('ch_qc_article_checked', { p_item_id: id }));
       }
     } else {
