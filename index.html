@@ -6002,6 +6002,25 @@ function wireAdminRows(el, paint){
   }));
 }
 
+/* ---------------- Comment and feedback boxes grow with the text ----------------
+   Jhen 17/11/2026: the Comment and Not approved boxes were 3 lines tall, so a longer note scrolled
+   inside them and was easy to miss. They now fit the whole text when opened and while typing, up to
+   half the screen, then scroll. Covers every card (GBP cards, blogs, pages, LinkedIn). */
+const GROW_SEL = 'textarea[data-notefor], textarea[data-rejwhy]';
+function growBox(t){
+  if (!t || !t.offsetParent) return;                       // hidden boxes have no height to measure
+  const cap = Math.round(window.innerHeight * 0.5);
+  t.style.height = 'auto';
+  const h = t.scrollHeight + 2;
+  t.style.height = Math.min(h, cap) + 'px';
+  t.style.overflowY = h > cap ? 'auto' : 'hidden';
+}
+document.addEventListener('input', e => { if (e.target.matches && e.target.matches(GROW_SEL)) growBox(e.target); });
+document.addEventListener('focusin', e => { if (e.target.matches && e.target.matches(GROW_SEL)) growBox(e.target); });
+// A box opened by Comment, Edit comment, Not approved or Update feedback is sized once it is visible.
+document.addEventListener('click', () => requestAnimationFrame(() =>
+  document.querySelectorAll(GROW_SEL).forEach(t => { if (t.offsetParent && !t.dataset.grown) { t.dataset.grown = '1'; growBox(t); } })));
+
 /* ---------------- Send reminder (staff) ----------------
    Jhen 29/10/2026, replacing the Lovable dashboard's reminder. Lists everything waiting on
    the client across every month (topics, then written content; sent-back items are left
