@@ -4812,7 +4812,7 @@ async function sgPaintDetail(el, box, r){
   const staff = sgStaff(), rev = sgRev(), preview = !!ME.preview;
   const mine = staff && r.suggested_by === ME.id;
   const [{ data: msgs }, ev] = await Promise.all([
-    sb.from('ch_suggestion_messages').select('*').eq('suggestion_id', r.id).order('created_at'),
+    sb.from('ch_suggestion_messages_v').select('*').eq('suggestion_id', r.id).order('created_at'),
     staff ? sb.from('ch_suggestion_events').select('*').eq('suggestion_id', r.id).order('created_at') : Promise.resolve({ data: [] })
   ]);
   if (tok !== SG_PAINT) return;
@@ -4859,10 +4859,10 @@ async function sgPaintDetail(el, box, r){
     + (acts ? '<div class="tkact">' + acts + '</div>' : '')
     + '<div class="sgsec"><h4>' + (staff ? 'Messages and team notes' : 'Messages') + '</h4><div class="tkmsgs">'
     + (thread.length ? thread.map(m => '<div class="tkmsg' + (m.kind === 'note' ? ' internal' : m.kind === 'staff' ? ' team' : '') + '">'
-        + '<div class="who">' + esc(!staff && m.kind === 'staff' ? 'Ready to Rank' : (m.author_name || ''))
+        + '<div class="who">' + esc(!staff && m.kind === 'staff' ? 'Ready to Rank team' : (m.author_name || ''))
         + (m.kind === 'note' ? ' · Team only' : m.kind === 'staff' && staff ? ' · to the client' : '') + ' · ' + esc(cWhen(m.created_at)) + '</div>'
         + '<div class="txt">' + esc(m.body) + '</div>'
-        + (m.needs_client ? '<div class="sgflag">' + (m.forwarded_at ? 'Sent to the client by ' + esc(m.forwarded_by || '') : 'Needs the client') + '</div>'
+        + (m.needs_client ? '<div class="sgflag">' + (m.forwarded_at ? (staff ? 'Sent to the client by ' + esc(m.forwarded_by || '') : 'Sent to you') : 'Needs the client') + '</div>'
             + (rev && !m.forwarded_at ? '<div class="tkact"><button type="button" class="btn" data-sgfwd="' + m.id + '">Send to client</button></div>' : '') : '')
         + '</div>').join('') : '<p class="tkhint">No messages yet.</p>') + '</div></div>'
     + sgCompose(r, staff, rev)
