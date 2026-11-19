@@ -4266,7 +4266,9 @@ async function wireTickets(el){
 }
 
 async function tkLoad(el){
-  const { data, error } = await sb.from('ch_tickets').select('*').eq('client_id', CLIENT_ID)
+  // Read through ch_tickets_v / ch_ticket_messages_v (tickets migration 10): for clients the database itself
+  // swaps every team member's name for "Ready to Rank team" (Jhen 19/11/2026); staff get full names.
+  const { data, error } = await sb.from('ch_tickets_v').select('*').eq('client_id', CLIENT_ID)
     .order('created_at', { ascending:false }).limit(500);
   if (error) { el.querySelector('#tkBody').innerHTML = '<p class="empty">Could not load tickets: ' + esc(error.message) + '</p>'; return; }
   TK_ROWS = data || [];
@@ -4388,7 +4390,7 @@ async function tkPaintDetail(el, box, r, act){
   // Supabase only sends a request once it is awaited or then'd, so a bare call never ran.
   if (staff) sb.rpc('ch_ticket_mark_viewed', { p_ticket: r.id }).then(() => {});
   const [{ data: msgs }, ev, dead] = await Promise.all([
-    sb.from('ch_ticket_messages').select('*').eq('ticket_id', r.id).order('created_at'),
+    sb.from('ch_ticket_messages_v').select('*').eq('ticket_id', r.id).order('created_at'),
     staff ? sb.from('ch_ticket_events').select('*').eq('ticket_id', r.id).order('created_at') : Promise.resolve({ data: [] }),
     // Slack notices that failed 4 times and stopped retrying (ch_ticket_outbox, staff only).
     staff ? sb.from('ch_ticket_outbox').select('kind,last_error').eq('ticket_id', r.id).eq('status', 'dead') : Promise.resolve({ data: [] })
@@ -4537,7 +4539,7 @@ async function tkPaintDetail(el, box, r, act){
           const { error } = await sb.rpc('ch_ticket_assign', { p_ticket: r.id, p_person: who.value });
           if (error) { go.disabled = false; return fail(error.message); }
         }
-        const { data: now } = await sb.from('ch_tickets').select('status').eq('id', r.id).maybeSingle();
+        const { data: now } = await sb.from('ch_tickets_v').select('status').eq('id', r.id).maybeSingle();
         if (now && now.status !== 'in_progress') {
           const { error } = await sb.rpc('ch_ticket_set_status', { p_ticket: r.id, p_status: 'in_progress', p_note: null });
           if (error) { go.disabled = false; return fail(error.message); }
