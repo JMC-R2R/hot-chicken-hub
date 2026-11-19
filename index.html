@@ -3840,7 +3840,8 @@ const HT_STEPS = {
     { el:() => htIn('.tklist .tk .tfst'), t:'Where each one is up to', p:'Open means we have it. In progress means someone is working on it. Waiting on you means we need you. Resolved means we think it is fixed and want you to check.' },
     { el:() => htIn('.tklist .tk'), t:'Open a ticket', p:'Press any ticket to read the whole conversation, see what we need from you, who is looking after it, and reply.' },
     { must:1, t:'Our emails bring you back here', p:'Whenever we reply or need something, you get an email. Press View and reply in the email and it opens that ticket right here in your hub, so you can read everything and answer us.' },
-    { must:1, t:'More help inside a ticket', p:'Once a ticket is open, press How this works at the top for a quick tour of replying and confirming fixes.' },
+    { cond:() => !!document.querySelector('.tklist .tk'), el:() => htIn('.tklist .tk'), t:'Let\u2019s look inside one', p:'Press Next and we will open this ticket and show you how to reply, add files and confirm a fix.' },
+    { cond:() => !document.querySelector('.tklist .tk'), must:1, t:'When you have a ticket', p:'The first time you open one, we will show you how to reply and confirm it is fixed. Press Show me around any time to see this again.' },
   ] : [],
   /* The team's Tickets tab tour (admin view): the "Show me around" button picks it for staff. */
   tkteamlist: [
@@ -3849,7 +3850,8 @@ const HT_STEPS = {
     { el:() => htIn('#tkNew'), t:'Raise one for the client', p:'If the client asks on a call, WhatsApp or email, raise it here so it is tracked with everything else.' },
     { el:() => htIn('#tkLogBtn'), t:'Activity log', p:'Every email and Slack notice for this client’s tickets, and whether it went through.' },
     { must:1, t:'Slack brings you here', p:'New tickets and client replies post to Slack. The link in Slack opens that ticket here, ready to take or answer.' },
-    { must:1, t:'Then answer it', p:'Open any ticket and press How to answer a ticket at the top for the step-by-step: taking it, replying, team notes and files.' },
+    { cond:() => !!document.querySelector('.tklist .tk'), el:() => htIn('.tklist .tk'), t:'Let\u2019s answer one', p:'Press Next and we will open this ticket and show you how to take it, reply to the client and leave team notes.' },
+    { cond:() => !document.querySelector('.tklist .tk'), must:1, t:'When a ticket comes in', p:'Open it and you will get the step-by-step for answering it. Press Show me around or How to answer a ticket any time to see these again.' },
   ],
   tkclient: [
     { el:() => htIn('.tkdetail .tkm'), t:'Who is looking after it', p:'The status and the name of the person on our team handling your ticket. Not picked up yet means it is with the team and someone will take it soon.' },
@@ -3900,11 +3902,13 @@ function htStrategySteps(){
     return { node:h, end, t:(n + 1) + '. ' + title, p: m ? m[1] : 'Here is the next part of your plan.' };
   });
 }
-let HT = null, htTimer = 0;
+let HT = null, htTimer = 0, HT_FORCE = null;
+const HT_CHAIN = { tickets: 'tkclient', tkteamlist: 'tkteam' };
 function htGroup(key){ const k = String(key); return k === 'plan' || k.startsWith('month:') ? 'plan' : k; }
 /* Jhen 12/11/2026: a one-stage hub keeps its own "seen" mark for the Content plan tour, so a client who did the
    old three-step tour sees the new two-step one once when their hub switches to one-stage. */
-function htKey(g){ return 'hub-tour-' + CFG.slug + '-' + g + (g === 'plan' && CFG.oneStage ? '-onestage' : ''); }
+function htKey(g){ return 'hub-tour-' + CFG.slug + '-' + g + (g === 'plan' && CFG.oneStage ? '-onestage' : '')
+  + (g === 'tickets' && CFG.ticketWalkthrough ? '-v2' : ''); }
 function htSeen(g){ try { return !!localStorage.getItem(htKey(g)); } catch (e) { return true; } }
 function htMark(g){ try { localStorage.setItem(htKey(g), new Date().toISOString()); } catch (e) {} }
 function htEnd(){ if (!HT) return; HT.nodes.forEach(n => n.remove());
@@ -3914,7 +3918,10 @@ function htStart(g){
   const intro = HT_INTRO[g]; if (!intro) return;
   const steps = HT_STEPS[g].flatMap(s => s.each ? htStrategySteps() : [s]).map(s => Object.assign({}, s, { node: s.node || (s.el ? s.el() : null) }))
     .map(s => (s.node && s.node.offsetParent === null && s.node.id !== 'tabs') ? Object.assign(s, { node:null }) : s)
-    .filter(s => s.node || s.must);
+    .filter(s => (!s.cond || s.cond()) && (s.node || s.must));
+  /* Chained tours (Jhen 19/11/2026): the Tickets tab tour runs straight on into the tour inside a ticket, so
+     nobody has to find the second button. The buttons stay for replaying either part. */
+  const chain = HT_CHAIN[g] && document.querySelector('.tklist .tk') ? HT_CHAIN[g] : null;
   htMark(g);   /* a page with nothing on it yet still gets its one-card explanation */
   const mk = c => { const d = document.createElement('div'); d.className = c; return d; };
   const ring = mk('htring'), tip = mk('httip');
@@ -3927,7 +3934,7 @@ function htStart(g){
       + '<h4>' + esc(i < 0 ? intro[0] : s.t) + '</h4><p>' + esc(i < 0 ? intro[1] : s.p) + '</p><div class="htbtns">'
       + '<button type="button" data-htskip>Skip</button>'
       + (i >= 0 ? '<button type="button" data-htback>Back</button>' : '')
-      + '<button type="button" class="go" data-htnext>' + (i === steps.length - 1 ? 'Finish' : i < 0 ? 'Show me around' : 'Next') + '</button></div>';
+      + '<button type="button" class="go" data-htnext>' + (i === steps.length - 1 ? (chain ? 'Next' : 'Finish') : i < 0 ? 'Show me around' : 'Next') + '</button></div>';
     if (i < 0 || !s.node) {
       /* No target: dim everything and centre the card on screen. */
       ring.style.cssText = 'position:fixed;left:-40px;top:-40px;width:0;height:0';
@@ -3950,7 +3957,9 @@ function htStart(g){
     }
     tip.querySelector('[data-htnext]').focus({ preventScroll:true });
   };
-  const go = d => { i += d; if (i >= steps.length) return htEnd(); if (i < -1) i = -1; draw(); };
+  const go = d => { i += d;
+    if (i >= steps.length) { htEnd(); const row = chain && document.querySelector('.tklist .tk'); if (row) { HT_FORCE = chain; row.click(); } return; }
+    if (i < -1) i = -1; draw(); };
   tip.addEventListener('click', e => {
     if (e.target.hasAttribute('data-htskip')) return htEnd();
     if (e.target.hasAttribute('data-htback')) return go(-1);
@@ -4425,7 +4434,8 @@ async function tkPaintDetail(el, box, r, act){
     + '</div>';
 
   // Ticket tour: once per browser, the first time someone opens a ticket (not over a confirm box).
-  if (tkTour && !act && !htSeen(tkTour)) setTimeout(() => { if (!HT && !document.getElementById('tkModal')) htStart(tkTour); }, 500);
+  const tkForce = HT_FORCE === tkTour; HT_FORCE = null;
+  if (tkTour && !act && (tkForce || !htSeen(tkTour))) setTimeout(() => { if (!HT && !document.getElementById('tkModal')) htStart(tkTour); }, tkForce ? 300 : 500);
   const reload = async () => { await tkLoad(el); };
   const fail = m => alert(m);
   // Done with a confirm box: drop it, and drop /claim or /resolve from the address so a
