@@ -3837,21 +3837,21 @@ const HT_STEPS = {
   tickets: CFG.ticketWalkthrough ? [
     { el:() => htIn('#tkNew'), t:'Raise a ticket', p:'Press this whenever you need something from us: a change to your website, a question, or something that is not working. Tell us what you need, pick how urgent it is and add screenshots or files if they help.' },
     { el:() => htIn('.fbbar'), t:'Find what needs you', p:'Open is everything we are working on. Waiting on you means we need an answer, a file or a go-ahead from you before we can keep going, so check it first.' },
-    { el:() => htIn('.tklist .tk .tfst'), t:'Where each one is up to', p:'Open means we have it. In progress means someone is working on it. Waiting on you means we need you. Resolved means we think it is fixed and want you to check.' },
-    { el:() => htIn('.tklist .tk'), t:'Open a ticket', p:'Press any ticket to read the whole conversation, see what we need from you, who is looking after it, and reply.' },
+    { el:() => htIn('.tklist [data-tko] .tfst'), t:'Where each one is up to', p:'Open means we have it. In progress means someone is working on it. Waiting on you means we need you. Resolved means we think it is fixed and want you to check.' },
+    { el:() => htIn('.tklist [data-tko]'), t:'Open a ticket', p:'Press any ticket to read the whole conversation, see what we need from you, who is looking after it, and reply.' },
     { must:1, t:'Our emails bring you back here', p:'Whenever we reply or need something, you get an email. Press View and reply in the email and it opens that ticket right here in your hub, so you can read everything and answer us.' },
-    { cond:() => !!document.querySelector('.tklist .tk'), el:() => htIn('.tklist .tk'), t:'Let\u2019s look inside one', p:'Press Next and we will open this ticket and show you how to reply, add files and confirm a fix.' },
-    { cond:() => !document.querySelector('.tklist .tk'), must:1, t:'When you have a ticket', p:'The first time you open one, we will show you how to reply and confirm it is fixed. Press Show me around any time to see this again.' },
+    { cond:() => !!htIn('.tklist [data-tko]'), el:() => htIn('.tklist [data-tko]'), t:'Let\u2019s look inside one', p:'Press Next and we will open this ticket and show you how to reply, add files and confirm a fix.' },
+    { cond:() => !htIn('.tklist [data-tko]'), must:1, t:'When you have a ticket', p:'The first time you open one, we will show you how to reply and confirm it is fixed. Press Show me around any time to see this again.' },
   ] : [],
   /* The team's Tickets tab tour (admin view): the "Show me around" button picks it for staff. */
   tkteamlist: [
     { el:() => htIn('.fbbar'), t:'Find your tickets', p:'Mine is everything assigned to you. Open is everything not yet resolved. Waiting on client is where we are waiting for the client, so nothing needs us there until they answer.' },
-    { el:() => htIn('.tklist .tk'), t:'Each ticket at a glance', p:'Priority, status, who raised it and who it is with. Press a ticket to open it and answer it.' },
+    { el:() => htIn('.tklist [data-tko]'), t:'Each ticket at a glance', p:'Priority, status, who raised it and who it is with. Press a ticket to open it and answer it.' },
     { el:() => htIn('#tkNew'), t:'Raise one for the client', p:'If the client asks on a call, WhatsApp or email, raise it here so it is tracked with everything else.' },
     { el:() => htIn('#tkLogBtn'), t:'Activity log', p:'Every email and Slack notice for this client’s tickets, and whether it went through.' },
     { must:1, t:'Slack brings you here', p:'New tickets and client replies post to Slack. The link in Slack opens that ticket here, ready to take or answer.' },
-    { cond:() => !!document.querySelector('.tklist .tk'), el:() => htIn('.tklist .tk'), t:'Let\u2019s answer one', p:'Press Next and we will open this ticket and show you how to take it, reply to the client and leave team notes.' },
-    { cond:() => !document.querySelector('.tklist .tk'), must:1, t:'When a ticket comes in', p:'Open it and you will get the step-by-step for answering it. Press Show me around or How to answer a ticket any time to see these again.' },
+    { cond:() => !!htIn('.tklist [data-tko]'), el:() => htIn('.tklist [data-tko]'), t:'Let\u2019s answer one', p:'Press Next and we will open this ticket and show you how to take it, reply to the client and leave team notes.' },
+    { cond:() => !htIn('.tklist [data-tko]'), must:1, t:'When a ticket comes in', p:'Open it and you will get the step-by-step for answering it. Press Show me around or How to answer a ticket any time to see these again.' },
   ],
   tkclient: [
     { el:() => htIn('.tkdetail .tkm'), t:'Who is looking after it', p:'The status and the name of the person on our team handling your ticket. Not picked up yet means it is with the team and someone will take it soon.' },
@@ -3921,7 +3921,7 @@ function htStart(g){
     .filter(s => (!s.cond || s.cond()) && (s.node || s.must));
   /* Chained tours (Jhen 19/11/2026): the Tickets tab tour runs straight on into the tour inside a ticket, so
      nobody has to find the second button. The buttons stay for replaying either part. */
-  const chain = HT_CHAIN[g] && document.querySelector('.tklist .tk') ? HT_CHAIN[g] : null;
+  const chain = HT_CHAIN[g] && htIn('.tklist [data-tko]') ? HT_CHAIN[g] : null;
   htMark(g);   /* a page with nothing on it yet still gets its one-card explanation */
   const mk = c => { const d = document.createElement('div'); d.className = c; return d; };
   const ring = mk('htring'), tip = mk('httip');
@@ -3958,7 +3958,7 @@ function htStart(g){
     tip.querySelector('[data-htnext]').focus({ preventScroll:true });
   };
   const go = d => { i += d;
-    if (i >= steps.length) { htEnd(); const row = chain && document.querySelector('.tklist .tk'); if (row) { HT_FORCE = chain; row.click(); } return; }
+    if (i >= steps.length) { htEnd(); const row = chain && htIn('.tklist [data-tko]'); if (row) { HT_FORCE = chain; row.click(); } return; }
     if (i < -1) i = -1; draw(); };
   tip.addEventListener('click', e => {
     if (e.target.hasAttribute('data-htskip')) return htEnd();
