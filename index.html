@@ -3797,12 +3797,13 @@ const HT_INTRO = {
   plan: ['How approving content works', 'Two steps each month: approve the topic, then approve the finished piece. Here is exactly where to click.'],
   keywords: ['Your keywords', 'The searches we are working to win for you, and where you stand on each one today.'],
   wins: ['Your quick wins', 'Things that have moved since your last report. We add to this through the month.'],
-  tickets: ['Ask us anything', 'Raise a request here and you can see where it is up to.'],
+  tickets: ['Ask us anything', 'Raise a request here, see where it is up to and answer us when we need something from you.'],
   reader: ['Reading a piece', 'This is the finished piece, ready for you to read. Here is how to tell us what you think.'],
   /* Tickets (hub.json "ticket_walkthrough", Jhen 19/11/2026). tkteam is the team's "How to answer a ticket": Jose
      asked for a way to talk to the client on the hub, not knowing the reply box already does it. tkclient is the
      client's tour inside a ticket; the Tickets tab steps are HT_STEPS.tickets. */
   tkclient: ['Inside your ticket', 'This is the whole conversation with our team about your request. Here is how to reply and let us know when it is sorted.'],
+  tkteamlist: ['Client tickets', 'Everything this client has asked us for. Here is how to find what needs you and keep on top of it.'],
   tkteam: ['How to answer a ticket', 'Everything about a ticket happens on this page: taking it, talking to the client, team notes and files. Here is where each one is.'],
 };
 const htIn = sel => { const p = document.querySelector('.tab-panel.active'); return p ? p.querySelector(sel) : null; };
@@ -3834,15 +3835,30 @@ const HT_STEPS = {
   wins: [],
   /* Empty (one welcome card) unless hub.json "ticket_walkthrough" is on. */
   tickets: CFG.ticketWalkthrough ? [
-    { el:() => htIn('#tkNew'), t:'Raise a ticket', p:'Press this whenever you need something from us: a change to your website, a question, or something that is not working. Add screenshots or files if they help.' },
-    { el:() => htIn('.fbbar'), t:'Keep track', p:'Open is everything we are working on. Waiting on you means we need something from you to keep going.' },
-    { el:() => htIn('.tklist .tk'), t:'Open a ticket', p:'Press any ticket to see the whole conversation, who is looking after it, and to reply.' },
-    { must:1, t:'We email you when we reply', p:'Every time our team replies, you get an email too, so nothing gets missed.' },
+    { el:() => htIn('#tkNew'), t:'Raise a ticket', p:'Press this whenever you need something from us: a change to your website, a question, or something that is not working. Tell us what you need, pick how urgent it is and add screenshots or files if they help.' },
+    { el:() => htIn('.fbbar'), t:'Find what needs you', p:'Open is everything we are working on. Waiting on you means we need an answer, a file or a go-ahead from you before we can keep going, so check it first.' },
+    { el:() => htIn('.tklist .tk .tfst'), t:'Where each one is up to', p:'Open means we have it. In progress means someone is working on it. Waiting on you means we need you. Resolved means we think it is fixed and want you to check.' },
+    { el:() => htIn('.tklist .tk'), t:'Open a ticket', p:'Press any ticket to read the whole conversation, see what we need from you, who is looking after it, and reply.' },
+    { must:1, t:'Our emails bring you back here', p:'Whenever we reply or need something, you get an email. Press View and reply in the email and it opens that ticket right here in your hub, so you can read everything and answer us.' },
+    { must:1, t:'More help inside a ticket', p:'Once a ticket is open, press How this works at the top for a quick tour of replying and confirming fixes.' },
   ] : [],
+  /* The team's Tickets tab tour (admin view): the "Show me around" button picks it for staff. */
+  tkteamlist: [
+    { el:() => htIn('.fbbar'), t:'Find your tickets', p:'Mine is everything assigned to you. Open is everything not yet resolved. Waiting on client is where we are waiting for the client, so nothing needs us there until they answer.' },
+    { el:() => htIn('.tklist .tk'), t:'Each ticket at a glance', p:'Priority, status, who raised it and who it is with. Press a ticket to open it and answer it.' },
+    { el:() => htIn('#tkNew'), t:'Raise one for the client', p:'If the client asks on a call, WhatsApp or email, raise it here so it is tracked with everything else.' },
+    { el:() => htIn('#tkLogBtn'), t:'Activity log', p:'Every email and Slack notice for this client’s tickets, and whether it went through.' },
+    { must:1, t:'Slack brings you here', p:'New tickets and client replies post to Slack. The link in Slack opens that ticket here, ready to take or answer.' },
+    { must:1, t:'Then answer it', p:'Open any ticket and press How to answer a ticket at the top for the step-by-step: taking it, replying, team notes and files.' },
+  ],
   tkclient: [
-    { must:1, el:() => htIn('#tkReply'), t:'Reply to the team', p:'Write here and press Send. If we were waiting on you, your reply puts the ticket straight back with us.' },
-    { el:() => htLabel('#tkRFiles'), t:'Add files', p:'Attach up to 5 files, like screenshots or documents, and they go with your reply.' },
-    { must:1, el:() => { const b = htIn('#tkFixed'); return b ? (b.closest('.tkconfirm') || b) : null; }, t:'When we think it is fixed', p:'Once we mark it resolved, you will see Confirm fixed and Still a problem here. If anything is not right, press Still a problem and it comes straight back to us.' },
+    { el:() => htIn('.tkdetail .tkm'), t:'Who is looking after it', p:'The status and the name of the person on our team handling your ticket. Not picked up yet means it is with the team and someone will take it soon.' },
+    { must:1, el:() => htIn('.tkmsgs'), t:'The whole conversation', p:'Every message about this request, newest at the bottom. Our replies are marked Ready to Rank. If we need something from you, this is where we ask.' },
+    { must:1, el:() => htIn('#tkReply'), t:'Reply to the team', p:'Write your answer here. It is the same as replying to us, just in your hub. If we were waiting on you, your reply puts the ticket straight back with us.' },
+    { el:() => htLabel('#tkRFiles'), t:'Add files', p:'Attach up to 5 files, like screenshots, photos or documents, and they go with your reply.' },
+    { el:() => htIn('#tkSendR'), t:'Send', p:'Press Send and our team is told straight away. You will get an email when we answer.' },
+    { must:1, el:() => { const b = htIn('#tkFixed'); return b ? (b.closest('.tkconfirm') || b) : null; }, t:'When we think it is fixed', p:'Once we mark it resolved, you will see Confirm fixed and Still a problem here. If anything is not right, press Still a problem and it comes straight back to us. If we do not hear back within 7 business days, we close it.' },
+    { el:() => htIn('#tkBack'), t:'Back to your tickets', p:'Press here to see all your tickets again.' },
   ],
   reader: [
     { el:() => $('artBody'), t:'Highlight to comment', p:'Select any words in the piece and a Comment button appears. Write what you would like changed and save it.' },
@@ -3949,6 +3965,10 @@ function htStart(g){
 /* After a tab opens: wait out selectTab's smooth scroll, then start if this client has not seen it. */
 function htAfterTab(key){
   htEnd(); clearTimeout(htTimer);
+  if (key === 'tickets' && CFG.ticketWalkthrough && ME && ME.kind === 'internal') {
+    if (!htSeen('tkteamlist')) htTimer = setTimeout(() => { if (!HT && !TK_OPEN && $('artModal').hidden) htStart('tkteamlist'); }, 900);
+    return;
+  }
   if (!CFG.walkthrough || !ME || ME.kind !== 'client' || ME.partner || ME.savvas) return;
   const g = htGroup(key); if (!HT_INTRO[g] || htSeen(g)) return;
   clearTimeout(htTimer);
@@ -3961,7 +3981,7 @@ function htReader(){
 document.addEventListener('click', e => { const b = e.target.closest('[data-hubtour]'); if (b) htStart(b.dataset.hubtour); });
 
 function head(t){
-  const htg = t.monthKey !== undefined ? 'plan' : t.key;
+  const htg = t.monthKey !== undefined ? 'plan' : (t.key === 'tickets' && CFG.ticketWalkthrough && ME && ME.kind === 'internal') ? 'tkteamlist' : t.key;
   const htb = CFG.walkthrough && HT_INTRO[htg] ? '<button class="htshow" type="button" data-hubtour="'+htg+'">'+(htg === 'plan' ? 'How to approve' : 'Show me around')+'</button>' : '';
   return '<div class="sec-head"><span class="sec-num">'+esc(t.num)+'</span><h2>'+esc(t.title)
        + (t.monthLabel ? ' <span class="mname">· '+esc(t.monthLabel)+'</span>' : '')+'</h2></div>'
