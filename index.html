@@ -604,6 +604,38 @@
   .pc-more .actions{display:flex;flex-wrap:wrap;gap:6px;margin:0}
   .pc-tgt{font-size:12.5px;color:var(--muted)}
   .pc-card .cassign{display:flex;align-items:center;gap:8px}
+  /* Team only line with the status beside it; Assigned to as profile circles with the name on hover. */
+  .pc-tlrow{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .pc-tlrow .bstage{margin:0}
+  .pc-asg{gap:6px}
+  .pc-avb{appearance:none;border:2px solid #fff;width:30px;height:30px;border-radius:50%;cursor:pointer;padding:0;position:relative;
+    display:inline-flex;align-items:center;justify-content:center;font:800 11.5px var(--sans);color:#fff;background:#1d4f91;
+    box-shadow:0 0 0 1px var(--line)}
+  .pc-avb + .pc-avb{margin-left:-8px}
+  .pc-avb.cl{background:var(--accent-fill);color:var(--on-accent)}
+  .pc-avb.none{background:#fff;color:var(--muted);border:1.5px dashed #b8c2cc;box-shadow:none;font-size:16px}
+  .pc-avb:hover,.pc-avb:focus-visible{z-index:2;outline:2px solid var(--accent-ink);outline-offset:1px}
+  .pc-avb[data-tip]:hover::after,.pc-avb[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 7px);
+    transform:translateX(-50%);white-space:nowrap;background:#0f1e2d;color:#fff;font:700 12px var(--sans);padding:4px 9px;border-radius:6px;
+    pointer-events:none;z-index:5}
+  /* Publishing pills in two columns. */
+  .pc-team .pc-pub{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pc-team .pc-pub .notebtn{width:100%;margin:0;text-align:center;white-space:normal;line-height:1.25;padding:6px 8px}
+  .pc-team .pc-pub .hide{display:none}
+  /* The pop-up the card's panels open in. */
+  .pcpop-wrap{position:fixed;inset:0;z-index:9500;background:rgba(12,20,28,.55);display:flex;align-items:flex-start;justify-content:center;
+    padding:60px 16px;overflow:auto}
+  .pcpop-wrap[hidden]{display:none}
+  .pcpop{width:100%;max-width:520px;background:#fff;border-radius:14px;box-shadow:0 18px 44px rgba(0,0,0,.3);overflow:hidden}
+  .pcpop-h{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .pcpop-h b{flex:1;min-width:0;font-size:15px;color:var(--ink-dk);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pcpop-x{appearance:none;border:0;background:none;font-size:26px;line-height:1;cursor:pointer;color:var(--muted);padding:0 4px}
+  .pcpop-b{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px}
+  .pcpop-b .panel{margin:0;display:flex;flex-direction:column;gap:6px}
+  .pcpop-b .panel[hidden]{display:none}
+  body.pcpop-on{overflow:hidden}
+  .pc-team .gp-live{margin:0;font-size:12.5px}
+  .pc-team .gp-live .schedset input{font-size:12.5px;padding:2px 5px}
   .gp-team .gcta{margin:0}
   .gcard{border:1px solid var(--line);border-radius:11px;background:#fff;padding:12px 13px 13px;
     display:flex;flex-direction:column;gap:7px;min-height:196px}
@@ -6881,6 +6913,62 @@ if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('click
 const PCRANK = { due: 0, chg: 1, soon: 2, ok: 3, sched: 4, live: 5 };
 function pcOrder(a, b){ return (PCRANK[statusKey(a)] ?? 9) - (PCRANK[statusKey(b)] ?? 9); }
 function pcSort(list){ return list.slice().sort(pcOrder); }
+// Assigned to, as round profile circles (Jhen 20/11/2026): the name shows on hover, and a click opens the
+// assign pop-up. The client's own reviewer shows as a second circle in the client's colour.
+function pcAssigned(r, who){
+  const id = esc(r.id);
+  const rv = r.client_reviewer ? ((CLIENTPEOPLE.find(p => p.user_id === r.client_reviewer) || {}).full_name || '') : '';
+  return '<div class="pc-row pc-asg"><span>Assigned to</span>'
+    + (who
+        ? '<button type="button" class="pc-avb" data-assignbtn="' + id + '" data-tip="' + esc(PERSON(who)) + '" aria-label="Assigned to ' + esc(PERSON(who)) + ', change">' + pcInitials(PERSON(who)) + '</button>'
+        : '<button type="button" class="pc-avb none" data-assignbtn="' + id + '" data-tip="Nobody yet" aria-label="Nobody assigned yet, assign">+</button>')
+    + (rv ? '<button type="button" class="pc-avb cl" data-assignbtn="' + id + '" data-tip="Client reviewer: ' + esc(rv) + '" aria-label="Client reviewer ' + esc(rv) + '">' + pcInitials(rv) + '</button>' : '')
+    + '</div>';
+}
+// Pop-ups for Target URL & meta, Assign, Brief & links and Notes on picture cards (Jhen 20/11/2026): the
+// card's own panel moves into a pop-up and goes back when it closes, so every input and copy button keeps
+// the handler the month wired. The panel ids, markup and save code are the card's, unchanged.
+let PCPOP = null;
+const PCPOPT = { seo: 'Target URL & meta', assign: 'Assign', links: 'Brief & links', note: 'Notes' };
+function pcPopClose(){
+  const w = document.getElementById('pcPop'); if (w) w.hidden = true;
+  document.body.classList.remove('pcpop-on');
+  if (!PCPOP) return;
+  const { panel, parent, next, kind, id } = PCPOP; PCPOP = null;
+  panel.hidden = true;
+  if (parent && parent.isConnected) parent.insertBefore(panel, next && next.parentNode === parent ? next : null); else panel.remove();
+  if (kind === 'assign') {      // show the new circle
+    const it = ITEMS.find(x => x.id === id), t = it && TABLIST.find(x => x.monthKey === it.month_key);
+    if (t && typeof refreshMonth === 'function') refreshMonth(t);
+  }
+}
+function pcPopOpen(panel, kind, id){
+  let w = document.getElementById('pcPop');
+  if (!w) {
+    w = document.createElement('div'); w.id = 'pcPop'; w.className = 'pcpop-wrap'; w.hidden = true;
+    w.innerHTML = '<div class="pcpop" role="dialog" aria-modal="true" aria-labelledby="pcPopT"><div class="pcpop-h"><b id="pcPopT"></b>'
+      + '<button type="button" class="pcpop-x" aria-label="Close">&times;</button></div><div class="pcpop-b"></div></div>';
+    document.body.appendChild(w);
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('.pcpop-x')) pcPopClose(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !w.hidden) pcPopClose(); });
+  }
+  pcPopClose();
+  PCPOP = { panel, parent: panel.parentNode, next: panel.nextSibling, kind, id };
+  const it = ITEMS.find(x => x.id === id);
+  w.querySelector('#pcPopT').textContent = PCPOPT[kind] + (it ? ' · ' + it.title : '');
+  w.querySelector('.pcpop-b').appendChild(panel);
+  panel.hidden = false; w.hidden = false; document.body.classList.add('pcpop-on');
+  const f = panel.querySelector('textarea,select,input,button'); if (f) f.focus({ preventScroll: true });
+}
+if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('click', e => {
+  const b = e.target.closest('[data-seo],[data-assignbtn],[data-links],[data-note]'); if (!b) return;
+  if (!b.closest('.pc-card, .gp-card')) return;          // only on the picture cards
+  const kind = b.dataset.seo ? 'seo' : b.dataset.assignbtn ? 'assign' : b.dataset.links ? 'links' : 'note';
+  const id = b.dataset[kind === 'assign' ? 'assignbtn' : kind];
+  const panel = document.getElementById(kind + '-' + id); if (!panel) return;
+  e.stopPropagation(); e.preventDefault();               // the card's own toggle would open it inline as well
+  pcPopOpen(panel, kind, id);
+}, true);
 // GBP picture cards: the same feedback and comment bubbles as the other cards. gpCard itself is
 // unchanged; its red feedback box and blue comment box are swapped for bubbles after it renders, and
 // anything that does not match exactly (a hub's own tweak) is left as it was.
@@ -6892,11 +6980,23 @@ function pcGpCard(r, staff){
     const nb = pcBubble(staff ? who : 'You', staff ? 'Not approved' : 'Feedback', 'pcfb', r.not_approved_at ? pcAgo(r.not_approved_at) : '', r.not_approved_reason);
     h = h.replace('<div class="gp-fb"><b>' + (staff ? 'Client feedback' : 'Your feedback') + '</b>' + esc(r.not_approved_reason) + '</div>', () => nb);
   }
+  if (staff && CFG.stagePills) {
+    const id = esc(r.id);
+    const row = '<div class="gp-team"><span class="tl">Team only</span>'
+      + '<div class="row"><button class="notebtn" type="button" data-assignbtn="' + id + '">Assign'
+      + (assignDot(r, staff) ? '<span class="notedot"></span>' : '') + '</button>' + stagePill(r) + '</div>';
+    h = h.replace(row, () => '<div class="gp-team pc-team"><div class="pc-tlrow"><span class="tl">Team only</span>' + stagePill(r) + '</div>'
+      + pcAssigned(r, (INTERNAL[r.id] || {}).assignee));
+  }
   // Copy caption for whoever uploads the post: the caption and its hashtags, exactly as written.
   if (staff && r.post_body) {
     const tags = (r.hashtags || []).map(t => '#' + String(t).replace(/^#+/, '')).join(' ');
     const cap = r.post_body + (tags ? '\n\n' + tags : '');
-    h = h.replace('<div class="gp-team"><span class="tl">Team only</span>', m => m
+    // After Assigned to when the GBP team row was rebuilt above, else straight after Team only.
+    const at = h.indexOf('<div class="pc-row pc-asg">'), end = at >= 0 ? h.indexOf('</div>', at) + 6 : -1;
+    if (end > 5) h = h.slice(0, end) + '<div class="gcta"><span class="gctab">Caption</span><span class="gurl">' + esc(String(r.post_body).slice(0, 60)) + '&hellip;</span>'
+      + '<button class="copybtn gctac" type="button" data-copy="' + esc(cap) + '">Copy caption</button></div>' + h.slice(end);
+    else h = h.replace(/<div class="gp-team"><span class="tl">Team only<\/span>/, m => m
       + '<div class="gcta"><span class="gctab">Caption</span><span class="gurl">' + esc(String(r.post_body).slice(0, 60)) + '&hellip;</span>'
       + '<button class="copybtn gctac" type="button" data-copy="' + esc(cap) + '">Copy caption</button></div>');
   }
@@ -7039,12 +7139,9 @@ function picCard(r, staff){
         : '')
       // Old Google Doc links and briefs stay reachable, but only on cards that have one.
       + (n.brief || r.doc_url ? '<button class="notebtn wpbtn" type="button" data-links="'+id+'">Brief &amp; links</button>' : '');
-    team = '<div class="gp-team pc-team"><span class="tl">Team only</span>'
-      + '<div class="pc-row">'
-        + (blogState ? '<span class="bstage '+blogState.cls+'">'+esc(blogState.label)+'</span>' : '')
-        + '<span>Assigned to <b>'+esc(n.assignee ? PERSON(n.assignee) : 'Unassigned')+'</b></span>'
-        + '<button class="linkbtn" type="button" data-assignbtn="'+id+'">Change' + (assignDot(r, staff) ? '<span class="notedot"></span>' : '') + '</button>'
-      + '</div>'
+    team = '<div class="gp-team pc-team"><div class="pc-tlrow"><span class="tl">Team only</span>'
+        + (blogState ? '<span class="bstage '+blogState.cls+'">'+esc(blogState.label)+'</span>' : '') + '</div>'
+      + pcAssigned(r, n.assignee)
       + '<div class="pc-row"><span class="schedset" title="'+(r.approved ? (li ? 'The date this goes live on LinkedIn' : 'The date this goes live on the website') : 'Approve the content before scheduling it')+'">Go-live date '
           + '<input type="date" data-sched="'+id+'" value="'+esc(r.scheduled_for||'')+'"'+(r.approved || r.scheduled_for ? '' : ' disabled')+'></span>'
         + syncTag + '</div>'
