@@ -636,6 +636,30 @@
   body.pcpop-on{overflow:hidden}
   .pc-team .gp-live{margin:0;font-size:12.5px}
   .pc-team .gp-live .schedset input{font-size:12.5px;padding:2px 5px}
+  /* v6 (Jhen 20/11/2026) */
+  .pc-avs{display:inline-flex;align-items:center}
+  .pc-avs .pc-avb + .pc-avb{margin-left:-7px}
+  .pc-avs .pc-avb{cursor:default}
+  .pc-asg .pc-avs + .pc-avb{margin-left:4px}
+  .pc-live.pc-pulse{animation:pcPulseB 1.5s ease-out infinite}
+  @keyframes pcPulseB{0%{box-shadow:0 0 0 0 rgba(29,111,224,.7);transform:scale(1)}35%{transform:scale(1.03)}
+    70%{box-shadow:0 0 0 13px rgba(29,111,224,0);transform:scale(1)}100%{box-shadow:0 0 0 0 rgba(29,111,224,0)}}
+  .pc-live.pc-pulse{border-color:#1d6fe0;color:#1d4ed8}
+  .gp-see.pc-pulse{animation:pcPulse 1.5s ease-out infinite;border-radius:8px;padding:4px 8px;text-decoration:none;
+    background:#fff;border:1.5px solid var(--accent-fill)}
+  .pc-read.pc-pulse:hover,.pc-live.pc-pulse:hover,.gp-see.pc-pulse:hover{animation-play-state:paused}
+  @media (prefers-reduced-motion: reduce){ .pc-live.pc-pulse,.gp-see.pc-pulse{animation:none;outline:3px solid rgba(29,111,224,.35);outline-offset:2px} }
+  .pc-seerow{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  /* Publishing pills: one line each, same height. */
+  .pc-team .pc-pub .notebtn{white-space:nowrap;font-size:10.5px;letter-spacing:.02em;padding:7px 4px;min-height:32px;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;text-overflow:ellipsis}
+  /* GBP team strip: tidy rows. */
+  .pc-team .gp-live{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .pc-team .gp-live .notebtn{font-size:10.5px;letter-spacing:.02em;padding:6px 10px;margin:0}
+  .pc-team .gcta{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px;margin:0}
+  .pc-team .gcta .gurl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pc-team .gcta .gctab{min-width:62px;text-align:center}
+  .pc-team .gp-live .notebtn.wpbtn,.pc-team .gp-live .notebtn{font-size:10.5px;letter-spacing:.02em;padding:6px 10px;margin:0;min-height:0}
   .gp-team .gcta{margin:0}
   .gcard{border:1px solid var(--line);border-radius:11px;background:#fff;padding:12px 13px 13px;
     display:flex;flex-direction:column;gap:7px;min-height:196px}
@@ -6913,16 +6937,38 @@ if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('click
 const PCRANK = { due: 0, chg: 1, soon: 2, ok: 3, sched: 4, live: 5 };
 function pcOrder(a, b){ return (PCRANK[statusKey(a)] ?? 9) - (PCRANK[statusKey(b)] ?? 9); }
 function pcSort(list){ return list.slice().sort(pcOrder); }
-// Assigned to, as round profile circles (Jhen 20/11/2026): the name shows on hover, and a click opens the
-// assign pop-up. The client's own reviewer shows as a second circle in the client's colour.
-function pcAssigned(r, who){
+// Assigned to, set by the stage, never by hand (Jhen 20/11/2026). Until the client approves: Jose, Jhen and
+// the client's project manager. Approved blogs, pages and GBP posts: Rishikesh, Neha and Daivesh join them,
+// so the delivery team can upload. Approved LinkedIn: Janice (she uploads), Jose, Jhen, plus Armand on his
+// clients. The project manager comes from the client record (Hannah's clients are Armand's, the rest Janice's).
+// Round circles, the name on hover. The client's own reviewer (hub.json "client_assign") keeps its circle,
+// which still opens the Assign pop-up. The old single assignee in ch_items_internal is left as it is.
+let PCPM = null, PCPMASK = false;
+function pcTeam(r){
+  const pm = PCPM || 'janice', li = r.deliverable === 'linkedin_article';
+  const t = !r.approved ? ['jose', 'jhen', pm]
+          : li ? ['janice', 'jose', 'jhen'].concat(pm === 'armand' ? ['armand'] : [])
+          : ['rishikesh', 'neha', 'daivesh', 'jose', 'jhen', pm];
+  return [...new Set(t)];
+}
+const PCAVC = { jose: '#1d4f91', jhen: '#7c3aed', janice: '#0e7490', armand: '#b45309', rishikesh: '#15803d', neha: '#be185d', daivesh: '#4338ca' };
+function pcTeamHtml(r){
+  return pcTeam(r).map(p => '<span class="pc-avb" tabindex="0" style="background:' + (PCAVC[p] || '#475467') + '" data-tip="' + esc(PERSON(p)) + '" aria-label="' + esc(PERSON(p)) + '">'
+    + pcInitials(PERSON(p)) + '</span>').join('');
+}
+function pcAssigned(r){
   const id = esc(r.id);
+  if (PCPM === null && !PCPMASK && typeof sb !== 'undefined' && ME && ME.kind === 'internal') {
+    PCPMASK = true;
+    sb.rpc('ch_hub_pm', { p_slug: CFG.slug }).then(({ data }) => {
+      if (typeof data !== 'string' || !data) return; PCPM = data;
+      document.querySelectorAll('[data-pcteam]').forEach(x => { const it = ITEMS.find(y => y.id === x.dataset.pcteam); if (it) x.innerHTML = pcTeamHtml(it); });
+    });
+  }
   const rv = r.client_reviewer ? ((CLIENTPEOPLE.find(p => p.user_id === r.client_reviewer) || {}).full_name || '') : '';
-  return '<div class="pc-row pc-asg"><span>Assigned to</span>'
-    + (who
-        ? '<button type="button" class="pc-avb" data-assignbtn="' + id + '" data-tip="' + esc(PERSON(who)) + '" aria-label="Assigned to ' + esc(PERSON(who)) + ', change">' + pcInitials(PERSON(who)) + '</button>'
-        : '<button type="button" class="pc-avb none" data-assignbtn="' + id + '" data-tip="Nobody yet" aria-label="Nobody assigned yet, assign">+</button>')
-    + (rv ? '<button type="button" class="pc-avb cl" data-assignbtn="' + id + '" data-tip="Client reviewer: ' + esc(rv) + '" aria-label="Client reviewer ' + esc(rv) + '">' + pcInitials(rv) + '</button>' : '')
+  return '<div class="pc-row pc-asg"><span>Assigned to</span><span class="pc-avs" data-pcteam="' + id + '">' + pcTeamHtml(r) + '</span>'
+    + (rv ? '<button type="button" class="pc-avb cl" data-assignbtn="' + id + '" data-tip="Client reviewer: ' + esc(rv) + '" aria-label="Client reviewer ' + esc(rv) + '">' + pcInitials(rv) + '</button>'
+       : CFG.clientAssign && r.stream !== 'gbp' ? '<button type="button" class="pc-avb none" data-assignbtn="' + id + '" data-tip="Add a client reviewer" aria-label="Add a client reviewer">+</button>' : '')
     + '</div>';
 }
 // Pop-ups for Target URL & meta, Assign, Brief & links and Notes on picture cards (Jhen 20/11/2026): the
@@ -6986,19 +7032,16 @@ function pcGpCard(r, staff){
       + '<div class="row"><button class="notebtn" type="button" data-assignbtn="' + id + '">Assign'
       + (assignDot(r, staff) ? '<span class="notedot"></span>' : '') + '</button>' + stagePill(r) + '</div>';
     h = h.replace(row, () => '<div class="gp-team pc-team"><div class="pc-tlrow"><span class="tl">Team only</span>' + stagePill(r) + '</div>'
-      + pcAssigned(r, (INTERNAL[r.id] || {}).assignee));
+      + pcAssigned(r));
   }
-  // Copy caption for whoever uploads the post: the caption and its hashtags, exactly as written.
-  if (staff && r.post_body) {
+  // Copy caption for whoever uploads the post, on the same line as See the post: the caption and hashtags.
+  const gk = statusKey(r);
+  h = h.replace('<button type="button" class="gp-see" data-gpsee="', m => '<div class="pc-seerow"><button type="button" class="gp-see' + (gk === 'due' || gk === 'chg' ? ' pc-pulse' : '') + '" data-gpsee="');
+  if (h.indexOf('<div class="pc-seerow">') >= 0) {
     const tags = (r.hashtags || []).map(t => '#' + String(t).replace(/^#+/, '')).join(' ');
-    const cap = r.post_body + (tags ? '\n\n' + tags : '');
-    // After Assigned to when the GBP team row was rebuilt above, else straight after Team only.
-    const at = h.indexOf('<div class="pc-row pc-asg">'), end = at >= 0 ? h.indexOf('</div>', at) + 6 : -1;
-    if (end > 5) h = h.slice(0, end) + '<div class="gcta"><span class="gctab">Caption</span><span class="gurl">' + esc(String(r.post_body).slice(0, 60)) + '&hellip;</span>'
-      + '<button class="copybtn gctac" type="button" data-copy="' + esc(cap) + '">Copy caption</button></div>' + h.slice(end);
-    else h = h.replace(/<div class="gp-team"><span class="tl">Team only<\/span>/, m => m
-      + '<div class="gcta"><span class="gctab">Caption</span><span class="gurl">' + esc(String(r.post_body).slice(0, 60)) + '&hellip;</span>'
-      + '<button class="copybtn gctac" type="button" data-copy="' + esc(cap) + '">Copy caption</button></div>');
+    const cap = staff && r.post_body ? r.post_body + (tags ? '\n\n' + tags : '') : '';
+    h = h.replace(/(<div class="pc-seerow"><button type="button" class="gp-see[^"]*"[^>]*>[\s\S]*?<\/button>)/, m => m
+      + (cap ? '<button class="copybtn gctac" type="button" data-copy="' + esc(cap) + '">Copy caption</button>' : '') + '</div>');
   }
   if (r.client_notes) {
     const nb = pcBubble(staff ? who : 'You', 'Comment', 'cl', '', r.client_notes);
@@ -7088,8 +7131,11 @@ function picCard(r, staff){
   }
 
   // The main button, with the client card's fallbacks. It pulses while the client's input is wanted.
-  const wantsYou = ready && !done && !r.not_approved;   // both views (Jhen 20/11/2026)
-  const pulse = wantsYou ? ' pc-pulse' : '';
+  // Pulse (Jhen 20/11/2026, both views): For approval and Changes requested pulse the main button; once it
+  // is Scheduled or Published the pulse moves to View live.
+  const sk = statusKey(r);
+  const pulse = (sk === 'due' || sk === 'chg') && ready ? ' pc-pulse' : '';
+  const livePulse = sk === 'sched' || sk === 'live' ? ' pc-pulse' : '';
   let read = '';
   if (ARTICLES[r.id]) {
     read = '<button class="btn pc-read'+pulse+'" type="button" data-read="'+id+'">'
@@ -7103,7 +7149,7 @@ function picCard(r, staff){
   // View live: the client sees it once the piece is live; the team as soon as there is a link.
   const liveLabel = li ? 'View on LinkedIn' : pg ? 'View live page' : 'View live post';
   const live = r.live_url && (isLive || staff) && read.indexOf(esc(r.live_url)) < 0
-    ? '<a class="btn pc-live" href="'+esc(r.live_url)+'" target="_blank" rel="noopener">&#8599; '
+    ? '<a class="btn pc-live'+livePulse+'" href="'+esc(r.live_url)+'" target="_blank" rel="noopener">&#8599; '
       + (isLive ? liveLabel : (pg ? 'View page (not indexed yet)' : 'View the link')) + '</a>' : '';
 
   // Feedback and old notes as bubbles, with the newest Read & comment comment below them.
@@ -7141,7 +7187,7 @@ function picCard(r, staff){
       + (n.brief || r.doc_url ? '<button class="notebtn wpbtn" type="button" data-links="'+id+'">Brief &amp; links</button>' : '');
     team = '<div class="gp-team pc-team"><div class="pc-tlrow"><span class="tl">Team only</span>'
         + (blogState ? '<span class="bstage '+blogState.cls+'">'+esc(blogState.label)+'</span>' : '') + '</div>'
-      + pcAssigned(r, n.assignee)
+      + pcAssigned(r)
       + '<div class="pc-row"><span class="schedset" title="'+(r.approved ? (li ? 'The date this goes live on LinkedIn' : 'The date this goes live on the website') : 'Approve the content before scheduling it')+'">Go-live date '
           + '<input type="date" data-sched="'+id+'" value="'+esc(r.scheduled_for||'')+'"'+(r.approved || r.scheduled_for ? '' : ' disabled')+'></span>'
         + syncTag + '</div>'
