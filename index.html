@@ -4136,6 +4136,7 @@ function htReader(){
 document.addEventListener('click', e => { const b = e.target.closest('[data-hubtour]'); if (b) htStart(b.dataset.hubtour); });
 
 function head(t){
+  if (CFG.picCards && t.monthKey !== undefined && ME && ME.kind === 'internal') return pcHead(t);   // picture cards: the team's tour
   const htg = t.monthKey !== undefined ? 'plan' : (t.key === 'tickets' && CFG.ticketWalkthrough && ME && ME.kind === 'internal') ? 'tkteamlist' : t.key;
   const htb = CFG.walkthrough && HT_INTRO[htg] ? '<button class="htshow" type="button" data-hubtour="'+htg+'">'+(htg === 'plan' ? 'How to approve' : 'Show me around')+'</button>' : '';
   return '<div class="sec-head"><span class="sec-num">'+esc(t.num)+'</span><h2>'+esc(t.title)
@@ -7099,6 +7100,44 @@ if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('click
   const t = TABLIST.find(x => x.monthKey === it.month_key);
   if (t && typeof refreshMonth === 'function') refreshMonth(t);
 });
+/* Walkthrough on picture cards (Jhen 20/11/2026). Admin view gets its own tour of the content plan, the
+   "Show me around" button on a month; the client tour's Read step points at the new Read & comment button.
+   Steps whose part is not on the month are skipped, as everywhere else in the tours. */
+const pcFirst = sel => { const p = document.querySelector('.tab-panel.active'); if (!p) return null;
+  return [...p.querySelectorAll(sel)].find(n => n.offsetParent !== null) || null; };
+if (typeof CFG !== 'undefined' && CFG.picCards && typeof HT_INTRO !== 'undefined') {
+  HT_INTRO.planteam = ['How the content plan works', 'Every blog, page, LinkedIn article and Google post for the month, as a card. Here is what each part is for and where you click.'];
+  HT_STEPS.planteam = [
+    { el:() => htIn('.mstrip'), t:'Pick a month', p:'Each month has its own page. Green months are finished.' },
+    { el:() => htIn('.mg-head'), t:'The month at a glance', p:'How many pieces are waiting on the client and how many we have sent them.' },
+    { el:() => pcFirst('.pc-card .cbub, .gp-card .cbub'), t:'Where each piece is up to', p:'Yellow is For approval, red is Changes requested, grey is being written, green is Approved, teal is Scheduled and blue is Published. Cards waiting on the client come first, then changes, then the rest.' },
+    { el:() => pcFirst('.pc-read'), t:'Read it, comment on it', p:'Opens the piece. Highlight any words to comment or suggest an edit. It pulses while the client still has to act; once a piece is Scheduled or Published, View live pulses instead.' },
+    { el:() => pcFirst('.pc-cmts:not([hidden]), .pc-cm'), t:'Comments and feedback', p:'The newest comment and any feedback from the client, with who said it. View all opens every comment.' },
+    { el:() => pcFirst('.pc-kw'), t:'The keyword', p:'The keyword this piece targets and its monthly searches. Only the team sees it.' },
+    { el:() => pcFirst('.pc-tlrow'), t:'Team only', p:'Everything in this box is for the team; the client never sees it. The pill says the stage.' },
+    { el:() => pcFirst('.pc-asg'), t:'Who has it', p:'Set by the stage, nobody assigns by hand. Until the client approves: Jose, Jhen and the project manager. Once approved, Rishikesh, Neha and Daivesh join to upload it; LinkedIn goes to Janice. Hover a circle for the name.' },
+    { el:() => pcFirst('.pc-team [data-sched]'), t:'Go-live date', p:'The day it goes live. Set it once the client has approved.' },
+    { el:() => pcFirst('.pc-qc'), t:'QC', p:'Where QC is up to. Open the checklist here, or inside Read & comment above the comments.' },
+    { el:() => pcFirst('.pc-pub'), t:'Everything to publish it', p:'Target URL & meta opens the URL, meta title and meta description with copy buttons. WordPress pack and View & copy HTML are for the website; LinkedIn pack is for LinkedIn.' },
+    { el:() => pcFirst('[data-pcpublish], [data-pcnoindex], [data-noindex]'), t:'Mark it published', p:'Pages: press Noindex removed once the page is open to Google. Blogs and LinkedIn: press Mark published once it is scheduled or live and paste the link. A future Go-live date shows Scheduled and turns Published by itself on the day.' },
+    { el:() => pcFirst('.pc-seerow'), t:'Google posts', p:'See the post shows the caption. Copy caption copies it with its hashtags, ready to paste into Google.' },
+    { el:() => pcFirst('.gp-card .gcta'), t:'Link and photo', p:'The button link to copy into the post, and the photo to download.' },
+    { el:() => pcFirst('[data-gbplive]'), t:'Publish the Google post', p:'Set the Go-live date, then press Mark published once it is up on the Google Business Profile.' },
+    { el:() => { const n = pcFirst('.pc-card [data-approve]'); return n ? (n.closest('label') || n) : null; }, t:'Approve and Not approved', p:'These are the client’s buttons. Only use them when the client has approved or asked for changes by phone or email.' },
+  ];
+  // Client tour: the Read step points at the picture card's Read & comment button.
+  (HT_STEPS.plan || []).forEach(st => {
+    if (/Read/.test(st.t || '')) st.el = () => pcFirst('.pc-read') || htIn('.readbtn');
+    if (/changed\?/.test(st.t || '')) st.el = () => pcFirst('.pc-tick.pc-no, .gp-acts .gp-no') || htLabel('[data-reject]');
+  });
+}
+// The month heading's tour button: the team's own tour in Admin view.
+function pcHead(t){
+  const htb = CFG.walkthrough && HT_INTRO.planteam ? '<button class="htshow" type="button" data-hubtour="planteam">Show me around</button>' : '';
+  return '<div class="sec-head"><span class="sec-num">'+esc(t.num)+'</span><h2>'+esc(t.title)
+       + (t.monthLabel ? ' <span class="mname">· '+esc(t.monthLabel)+'</span>' : '')+'</h2></div>'
+       + (t.intro ? '<p class="intro">'+esc(t.intro)+'</p>' : '') + htb;
+}
 function picCard(r, staff){
   const id = esc(r.id), st = esc(r.client_status), fs = esc(r.funnel_stage || '');
   const li = r.deliverable === 'linkedin_article', pg = isPage(r);
