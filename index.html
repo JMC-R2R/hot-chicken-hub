@@ -660,6 +660,9 @@
   .pc-team .gcta .gurl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pc-team .gcta .gctab{min-width:62px;text-align:center}
   .pc-team .gp-live .notebtn.wpbtn,.pc-team .gp-live .notebtn{font-size:10.5px;letter-spacing:.02em;padding:6px 10px;margin:0;min-height:0}
+  /* Slack profile photos in the Assigned to circles. */
+  .pc-avb.pc-avimg{background:#fff !important;padding:0}
+  .pc-avb.pc-avimg img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
   .gp-team .gcta{margin:0}
   .gcard{border:1px solid var(--line);border-radius:11px;background:#fff;padding:12px 13px 13px;
     display:flex;flex-direction:column;gap:7px;min-height:196px}
@@ -6963,17 +6966,31 @@ function pcTeam(r){
   return [...new Set(t)];
 }
 const PCAVC = { jose: '#1d4f91', jhen: '#7c3aed', janice: '#0e7490', armand: '#b45309', rishikesh: '#15803d', neha: '#be185d', daivesh: '#4338ca' };
+// Their Slack profile photos (ch_team_avatars, staff only, Jhen 20/11/2026); initials until the photos load,
+// or if a photo ever fails to load.
+let PCAV = null;
 function pcTeamHtml(r){
-  return pcTeam(r).map(p => '<span class="pc-avb" tabindex="0" style="background:' + (PCAVC[p] || '#475467') + '" data-tip="' + esc(PERSON(p)) + '" aria-label="' + esc(PERSON(p)) + '">'
-    + pcInitials(PERSON(p)) + '</span>').join('');
+  return pcTeam(r).map(p => {
+    const a = PCAV && PCAV[p], nm = (a && a.full_name) || PERSON(p), ini = pcInitials(PERSON(p));
+    const photo = a && /^https:\/\//.test(a.avatar_url || '');
+    return '<span class="pc-avb' + (photo ? ' pc-avimg' : '') + '" tabindex="0" style="background:' + (PCAVC[p] || '#475467') + '" data-tip="' + esc(nm) + '" aria-label="' + esc(nm) + '">'
+      + (photo ? '<img src="' + esc(a.avatar_url) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove(\'pc-avimg\');this.replaceWith(\'' + ini + '\')">' : ini)
+      + '</span>';
+  }).join('');
+}
+function pcTeamRepaint(){
+  document.querySelectorAll('[data-pcteam]').forEach(x => { const it = ITEMS.find(y => y.id === x.dataset.pcteam); if (it) x.innerHTML = pcTeamHtml(it); });
 }
 function pcAssigned(r){
   const id = esc(r.id);
   if (PCPM === null && !PCPMASK && typeof sb !== 'undefined' && ME && ME.kind === 'internal') {
     PCPMASK = true;
     sb.rpc('ch_hub_pm', { p_slug: CFG.slug }).then(({ data }) => {
-      if (typeof data !== 'string' || !data) return; PCPM = data;
-      document.querySelectorAll('[data-pcteam]').forEach(x => { const it = ITEMS.find(y => y.id === x.dataset.pcteam); if (it) x.innerHTML = pcTeamHtml(it); });
+      if (typeof data !== 'string' || !data) return; PCPM = data; pcTeamRepaint();
+    });
+    sb.from('ch_team_avatars').select('person,full_name,avatar_url').then(({ data }) => {
+      if (!Array.isArray(data) || !data.length) return;
+      PCAV = {}; data.forEach(a => { if (a && a.person) PCAV[a.person] = a; }); pcTeamRepaint();
     });
   }
   const rv = r.client_reviewer ? ((CLIENTPEOPLE.find(p => p.user_id === r.client_reviewer) || {}).full_name || '') : '';
