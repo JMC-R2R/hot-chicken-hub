@@ -6825,9 +6825,19 @@ function pcQueue(id){ PCWANT.add(id); if (!PCTIMER) PCTIMER = setTimeout(pcLoad,
 function pcCover(r){
   if (r.deliverable === 'linkedin_article' && r.banner_url) return r.banner_url;
   // card_image_url: the live page's own photo, for pieces written before content lived in the hub.
-  if (!pcArt(r)) return r.card_image_url || '';
+  if (!pcArt(r)) return r.card_image_url || pcPool(r);
   if (!(r.id in PCCOVER)) pcQueue(r.id);
-  return PCCOVER[r.id] || r.card_image_url || '';
+  return PCCOVER[r.id] || r.card_image_url || (r.id in PCCOVER ? pcPool(r) : '');
+}
+// No photo of its own yet (not written, or written without images): one of the client's own photos from their
+// Google posts, the same one every time for the same card (Jhen 20/11/2026). The status pill on the photo still
+// says where the piece is up to. LinkedIn keeps its banner or the placeholder.
+function pcPool(r){
+  if (r.deliverable === 'linkedin_article') return '';
+  const pool = ITEMS.filter(x => x.stream === 'gbp' && /^https:\/\//.test(x.image_url || '')).map(x => x.image_url);
+  if (!pool.length) return '';
+  let h = 0; for (const c of String(r.id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return pool[h % pool.length];
 }
 function pcComments(r){
   if (!pcArt(r)) return [];
@@ -6855,11 +6865,13 @@ async function pcLoad(){
     (c.data || []).forEach(x => { (PCCMT[x.item_id] = PCCMT[x.item_id] || []).push(x); });
   }
   ids.forEach(id => {
-    if (PCCOVER[id]) document.querySelectorAll('[data-pcimg="' + id + '"]').forEach(box => {
+    const pit = ITEMS.find(x => x.id === id);
+    const src = PCCOVER[id] || (pit && (pit.card_image_url || pcPool(pit))) || '';
+    if (src) document.querySelectorAll('[data-pcimg="' + id + '"]').forEach(box => {
       if (box.querySelector('img')) return;
       box.classList.remove('pc-ph');
       box.querySelectorAll('.pc-phin').forEach(x => x.remove());
-      const img = document.createElement('img'); img.src = PCCOVER[id]; img.alt = ''; img.loading = 'lazy';
+      const img = document.createElement('img'); img.src = src; img.alt = ''; img.loading = 'lazy';
       box.appendChild(img);
     });
     document.querySelectorAll('[data-pccmt="' + id + '"]').forEach(box => { box.innerHTML = pcCmtHtml(id); box.hidden = !box.innerHTML; });
