@@ -6988,7 +6988,7 @@ function picCard(r, staff){
   }
 
   // The main button, with the client card's fallbacks. It pulses while the client's input is wanted.
-  const wantsYou = !staff && ready && !done && !r.not_approved;
+  const wantsYou = ready && !done && !r.not_approved;   // both views (Jhen 20/11/2026)
   const pulse = wantsYou ? ' pc-pulse' : '';
   let read = '';
   if (ARTICLES[r.id]) {
