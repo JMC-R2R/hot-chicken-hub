@@ -545,8 +545,11 @@
   .pc-live{background:#fff;border:1.5px solid var(--line);color:var(--ink-dk);padding:8px 12px;font-size:13.5px}
   .pc-live:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
   /* Read & comment pulses while the client's input is wanted (it replaces the Start here tag on these cards). */
-  @keyframes pcPulse{0%{box-shadow:0 0 0 0 rgba(217,62,28,.45)}70%{box-shadow:0 0 0 12px rgba(217,62,28,0)}100%{box-shadow:0 0 0 0 rgba(217,62,28,0)}}
-  .pc-read.pc-pulse{animation:pcPulse 1.8s ease-out infinite}
+  @keyframes pcPulse{0%{box-shadow:0 0 0 0 rgba(217,62,28,.8);transform:scale(1)}
+    35%{transform:scale(1.035)}70%{box-shadow:0 0 0 14px rgba(217,62,28,0);transform:scale(1)}
+    100%{box-shadow:0 0 0 0 rgba(217,62,28,0);transform:scale(1)}}
+  .pc-read.pc-pulse{animation:pcPulse 1.5s ease-out infinite}
+  .pc-read.pc-pulse:hover{animation-play-state:paused}
   @media (prefers-reduced-motion: reduce){ .pc-read.pc-pulse{animation:none;outline:3px solid rgba(217,62,28,.35);outline-offset:2px} }
   /* Comments, feedback and notes: one small bubble each, like a social post. */
   .pc-cmts{display:flex;flex-direction:column;gap:6px}
@@ -586,7 +589,6 @@
   .pc-qc.due{border-color:#f4d6a6;background:#fffaf2}
   .pc-qc.ok{border-color:#b8e3da;background:#f1faf7}
   .pc-qc.chg{border-color:#f3c2c2;background:#fff6f6}
-  .pc-qck{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;font-weight:800;color:var(--muted)}
   .pc-open{margin-left:auto;font-weight:800;color:var(--accent-ink);white-space:nowrap}
   .pc-qcd summary{cursor:pointer}
   .pc-qcd[open] .pc-open{opacity:.6}
@@ -2382,6 +2384,7 @@ async function openArticle(itemId, keepScroll){
    as the card, beside the blog, so the reviewer reads, fixes and ticks without closing it.
    Suggest edit and Undo reopen the article, which reloads this with the new version. */
 async function loadArtQC(itemId, ver){
+  if (CFG.picCards && await pcArtQC(itemId, ver)) return;   // picture cards: pages and LinkedIn get QC here too
   const box = $('artQC'), it = ITEMS.find(x => x.id === itemId);
   if (!ME || ME.kind !== 'internal' || !it || it.stream !== 'blog' || it.deliverable === 'linkedin_article') { box.hidden = true; box.innerHTML = ''; return; }
   if (ARTICLES[itemId]) ARTICLES[itemId].version = ver;
@@ -6343,7 +6346,7 @@ function monthBriefMarkup(t){
     body += '<div class="typehead"><span class="badge '+(TYPE_BADGE[stream]||'b-blog')+'">'
           + esc(TYPE_LABEL[stream]||stream)+'</span><h3>'+esc(TYPE_HEAD[stream]||stream)+'</h3>'
           + '<span class="tc">'+sr.length+' '+(sr.length===1?'item':'items')+'</span></div>';
-    if (stream !== 'gbp' && CFG.picCards) { body += '<div class="gp-grid">'; for (const r of sr) body += itemCard(r, staff); body += '</div>'; continue; }
+    if (stream !== 'gbp' && CFG.picCards) { body += '<div class="gp-grid">'; for (const r of pcSort(sr)) body += itemCard(r, staff); body += '</div>'; continue; }
     if (stream !== 'gbp') { for (const r of sr) body += itemCard(r, staff); continue; }
     // GBP: 3 posts a week, grouped by week so the client can approve a week in one click.
     // The pill reads wkDone, never !open. An item that is still 'started' is not approvable yet
@@ -6367,6 +6370,7 @@ function monthBriefMarkup(t){
                              : '<span class="rag amber"><i></i>Not ready to approve yet</span>')
             + '</div>';
       body += CFG.gbpCards ? '<div class="gp-grid">' : '<div class="ggrid">';
+      if (CFG.picCards && CFG.gbpCards) wr.sort(pcOrder);   // picture cards: waiting on the client first
       for (const r of wr) body += CFG.gbpCards ? gpCard(r, staff) : gbpCard(r, staff);
       body += '</div>';
     });
@@ -6486,6 +6490,7 @@ function gbpPublishRow(r){
 }
 const GPOPEN = {};
 function gpCard(r, staff){
+  if (CFG.picCards && !PCGPIN) return pcGpCard(r, staff);   // picture cards: feedback as bubbles
   const id = esc(r.id);
   const k = statusKey(r);
   const hasCaption = !!(r.post_body && r.post_cta);
@@ -6821,7 +6826,7 @@ function pcCmtHtml(id){
     + (list.length > 1 ? 'View all ' + list.length + ' comments' : 'Open the comment') + '</button>';
 }
 // One QC line on every blog, page and LinkedIn card, in every state. The full checklist opens from it.
-function pcQc(r, staff){
+function pcQcLine(r){
   const a = ARTICLES[r.id], li = r.deliverable === 'linkedin_article';
   let line, cls = '';
   if (!a) line = 'Not written yet';
@@ -6833,11 +6838,16 @@ function pcQc(r, staff){
   else if (a.qc_status === 'approved') { line = '&#10003; QC approved by <b>' + esc(a.qc_name || '') + '</b>' + (r.review_on ? ', to the client ' + esc(ausDate(r.review_on)) : ''); cls = ' ok'; }
   else if (a.qc_status === 'changes') { line = 'Sent back by <b>' + esc(a.qc_name || '') + '</b>'; cls = ' chg'; }
   else { line = 'Ready for QC'; cls = ' due'; }
+  return { line, cls };
+}
+function pcQc(r, staff){
+  const li = r.deliverable === 'linkedin_article';
+  const { line, cls } = pcQcLine(r);
   const body = qcPanel(r, staff);
-  if (!body) return '<div class="pc-qc' + cls + '"><span class="pc-qck">QC</span><span>' + line + '</span></div>';
+  if (!body) return '<div class="pc-qc' + cls + '"><span>' + line + '</span></div>';
   const id = esc(r.id);
   return '<details class="pc-qcd" data-pcmore="qc-' + id + '"' + (PCMORE.has('qc-' + r.id) ? ' open' : '') + '>'
-    + '<summary class="pc-qc' + cls + '"><span class="pc-qck">QC</span><span>' + line + '</span><span class="pc-open">'
+    + '<summary class="pc-qc' + cls + '"><span>' + line + '</span><span class="pc-open">'
     + (li ? 'Open' : 'Open checklist') + '</span></summary>' + body + '</details>';
 }
 // Remember which folds are open, so a re-render of the month keeps them open.
@@ -6863,6 +6873,54 @@ if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('click
   const real = b.closest('.pc-card') && b.closest('.pc-card').querySelector('[data-noindex="' + id + '"]');
   if (real) real.click();
 });
+// Cards waiting on the client first, then changes requested, being written, approved, scheduled, published.
+// Same order in both views, and the GBP weeks follow it too (Jhen 20/11/2026). The sort is stable, so
+// cards in the same state keep their date order.
+const PCRANK = { due: 0, chg: 1, soon: 2, ok: 3, sched: 4, live: 5 };
+function pcOrder(a, b){ return (PCRANK[statusKey(a)] ?? 9) - (PCRANK[statusKey(b)] ?? 9); }
+function pcSort(list){ return list.slice().sort(pcOrder); }
+// GBP picture cards: the same feedback and comment bubbles as the other cards. gpCard itself is
+// unchanged; its red feedback box and blue comment box are swapped for bubbles after it renders, and
+// anything that does not match exactly (a hub's own tweak) is left as it was.
+let PCGPIN = false;
+function pcGpCard(r, staff){
+  PCGPIN = true; let h; try { h = gpCard(r, staff); } finally { PCGPIN = false; }
+  const who = CLIENT_NAME || 'Client';
+  if (r.not_approved && !r.approved && r.not_approved_reason) {
+    const nb = pcBubble(staff ? who : 'You', staff ? 'Not approved' : 'Feedback', 'pcfb', r.not_approved_at ? pcAgo(r.not_approved_at) : '', r.not_approved_reason);
+    h = h.replace('<div class="gp-fb"><b>' + (staff ? 'Client feedback' : 'Your feedback') + '</b>' + esc(r.not_approved_reason) + '</div>', () => nb);
+  }
+  if (r.client_notes) {
+    const nb = pcBubble(staff ? who : 'You', 'Comment', 'cl', '', r.client_notes);
+    h = h.replace('<div class="gp-cm"><b>' + (staff ? 'Comment' : 'Your comment') + '</b>' + esc(r.client_notes) + '</div>', () => nb);
+  }
+  return h;
+}
+// QC inside Preview page & comment for pages, above the comments, team only (Jhen 20/11/2026). Blogs
+// already have it and keep their own code. A page uses the same checklist, ticks and QC approve as its
+// card, so this loads the same three rows and hands over to the existing renderArtQC. LinkedIn has no
+// checklist, so its pop-up shows the QC line. Returns false for anything it leaves to loadArtQC.
+async function pcArtQC(itemId, ver){
+  const it = ITEMS.find(x => x.id === itemId), box = $('artQC');
+  if (!ME || ME.kind !== 'internal' || !it || it.stream === 'blog') return false;
+  if (it.deliverable === 'linkedin_article') {
+    box.hidden = false; box.innerHTML = '<h4>QC</h4><p class="qcsc">' + pcQcLine(it).line + '</p>';
+    return true;
+  }
+  if (!isPage(it)) return false;
+  if (ARTICLES[itemId]) ARTICLES[itemId].version = ver;
+  const [x, q, d] = await Promise.all([
+    sb.from('ch_article_auto_checks').select('item_id,article_version,results,failed,checked_at').eq('item_id', itemId).maybeSingle(),
+    sb.from('ch_qc_checklists').select('item_id,article_version,checks,note,checked_name,checked_at').eq('item_id', itemId).maybeSingle(),
+    sb.from('ch_qc_checklist_drafts').select('item_id,article_version,checks,note,updated_at').eq('item_id', itemId).maybeSingle()
+  ]);
+  if (!ART || ART.id !== itemId) return true;
+  if (x.data) AUTOCHECKS[itemId] = x.data;
+  if (q.data) QCCHECKS[itemId] = q.data;
+  if (d.data && !QCSAVET[itemId]) { QCDRAFTS[itemId] = d.data; delete QCTICKS[itemId]; delete QCNOTES[itemId]; }
+  renderArtQC(itemId);
+  return true;
+}
 function picCard(r, staff){
   const id = esc(r.id), st = esc(r.client_status), fs = esc(r.funnel_stage || '');
   const li = r.deliverable === 'linkedin_article', pg = isPage(r);
@@ -7002,7 +7060,7 @@ function picCard(r, staff){
       + '<div class="gp-type">' + esc(pcType(r))
         + (r.scheduled_for ? ' &middot; ' + (isLive ? 'Went live ' : 'Goes live ') + esc(ausDate(r.scheduled_for)) : '') + '</div>'
       + '<h3>' + esc(r.title) + '</h3>'
-      + (aboutLine ? '<div class="gp-sub pc-about">' + aboutLine + '</div>' : '')
+      + (aboutLine && staff ? '<div class="gp-sub pc-about">' + aboutLine + '</div>' : '')
       + (read || live ? '<div class="pc-readrow">' + read + live + '</div>' : '')
       + fb + note + cmt
       + cAssign
