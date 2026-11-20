@@ -518,6 +518,15 @@
   /* Picture cards for blogs, pages and LinkedIn (hub.json "picture_cards", Jhen 20/11/2026). They sit
      in the GBP grid and reuse the gp-card look; only the pieces below are new. */
   .pc-card .gp-in > *{flex-shrink:0}
+  /* The card body takes the status colour, softer than the old full-card colours; the photo stays as is.
+     With the switch on, the GBP picture cards get the same tint, so a month reads as one. */
+  html.pcon .gp-card .gp-in{background:#fff}
+  html.pcon .gp-card.st-due .gp-in{background:#fff7dc}
+  html.pcon .gp-card.st-ok .gp-in{background:#e7f6ed}
+  html.pcon .gp-card.st-chg .gp-in{background:#fdeceb}
+  html.pcon .gp-card.st-soon .gp-in{background:#f2f4f7}
+  html.pcon .gp-card.st-sched .gp-in{background:#e3f5f2}
+  html.pcon .gp-card.st-live .gp-in{background:#e8effd}
   .pc-card .gp-img img{transition:transform .35s ease}
   .pc-card:hover .gp-img img{transform:scale(1.03)}
   .gp-img.pc-ph{display:flex;align-items:center;justify-content:center;
@@ -527,28 +536,70 @@
     color:#fff;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);border-radius:20px;padding:5px 14px}
   .pc-phs{font-size:13px;font-weight:700;color:rgba(255,255,255,.85)}
   .pc-about{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;min-height:2.8em}
-  .pc-readrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
-  .pc-read{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;
-    background:var(--accent-fill);border-color:var(--accent-fill);color:var(--on-accent);font-weight:800;
-    padding:10px 12px;font-size:14px;text-decoration:none;border-radius:10px}
+  .pc-readrow{display:flex;flex-direction:column;gap:7px;margin-top:2px}
+  .pc-read,.pc-live{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;
+    font-weight:800;padding:10px 12px;font-size:14px;text-decoration:none;border-radius:10px}
+  .pc-read{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--on-accent)}
   .pc-read:hover{filter:brightness(1.06)}
   .pc-read .ccount{margin-left:4px}
-  .pc-readrow .readhint{margin:0}
-  .pc-tick{display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;user-select:none}
+  .pc-live{background:#fff;border:1.5px solid var(--line);color:var(--ink-dk);padding:8px 12px;font-size:13.5px}
+  .pc-live:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
+  /* Read & comment pulses while the client's input is wanted (it replaces the Start here tag on these cards). */
+  @keyframes pcPulse{0%{box-shadow:0 0 0 0 rgba(217,62,28,.45)}70%{box-shadow:0 0 0 12px rgba(217,62,28,0)}100%{box-shadow:0 0 0 0 rgba(217,62,28,0)}}
+  .pc-read.pc-pulse{animation:pcPulse 1.8s ease-out infinite}
+  @media (prefers-reduced-motion: reduce){ .pc-read.pc-pulse{animation:none;outline:3px solid rgba(217,62,28,.35);outline-offset:2px} }
+  /* Comments, feedback and notes: one small bubble each, like a social post. */
+  .pc-cmts{display:flex;flex-direction:column;gap:6px}
+  .pc-cm{display:flex;gap:9px;align-items:flex-start}
+  .pc-av{flex:0 0 30px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:11.5px;font-weight:800;color:#fff;background:#1d4f91}
+  .pc-cm.cl .pc-av{background:var(--accent-fill);color:var(--on-accent)}
+  .pc-cm.pcfb .pc-av{background:#d92d20}
+  .pc-cmb{flex:1;min-width:0;background:rgba(255,255,255,.85);border:1px solid var(--line);border-radius:4px 12px 12px 12px;padding:6px 10px}
+  .pc-cm.pcfb .pc-cmb{border-color:#f3c2c2;background:#fff6f5}
+  .pc-cmh{display:flex;flex-wrap:wrap;gap:2px 7px;align-items:baseline;font-size:12.5px}
+  .pc-cmh b{color:var(--ink-dk)}
+  .pc-cmk{font-size:11px;font-weight:700;color:var(--muted)}
+  .pc-cm.pcfb .pc-cmk{color:#b42318}
+  .pc-cmt{font-size:11px;color:var(--muted);margin-left:auto}
+  .pc-cmx{font-size:13.5px;line-height:1.4;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  .pc-cmall{appearance:none;border:0;background:none;cursor:pointer;padding:0 0 0 39px;text-align:left;
+    font-size:12.5px;font-weight:800;color:var(--accent-ink)}
+  .pc-cmall:hover{text-decoration:underline}
+  /* Approve and Not approved, dressed as the GBP buttons. */
+  .pc-tick{display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;user-select:none;position:relative}
   .pc-tick input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
   .pc-tick:focus-within{outline:2px solid var(--accent-ink);outline-offset:2px}
   .gp-acts .pc-tick.pc-ok{background:#1c9b5e;border-color:#1c9b5e;color:#fff}
-  .gp-acts .pc-tick.pc-ok.on{background:#e8f6ec;border-color:#bfe3c9;color:#1c7c54}
+  .gp-acts .pc-tick.pc-ok.on{background:#fff;border-color:#bfe3c9;color:#1c7c54}
   .gp-acts .pc-tick.pc-no{background:#fff;border-color:#d92d20;color:#b42318}
-  .gp-acts .pc-tick.pc-no.on{background:#fde2e0}
   .gp-acts .pc-tick.off{opacity:.5;cursor:not-allowed}
-  .pc-team .facts{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12.5px;margin:0}
-  .pc-team .actions{display:flex;flex-wrap:wrap;gap:6px;margin:0}
-  .pc-team .staffrow{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;margin:0;padding:0;border:0;background:none}
+  .gp-acts .pc-note{grid-column:1 / -1}
+  /* The Team only strip: status row, QC line, publishing buttons, then More. */
+  .pc-team{background:rgba(255,255,255,.7);border:1px dashed var(--line);border-radius:10px;padding:9px 10px;margin-top:4px}
+  .pc-row{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px}
+  .pc-row .bstage{margin:0}
   .pc-team .schedset input{font-size:12.5px;padding:2px 5px}
+  .pc-pub{gap:6px}
+  .pc-qc{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:6px 9px;border-radius:8px;background:#fff;border:1px solid var(--line);list-style:none}
+  .pc-qc::-webkit-details-marker{display:none}
+  .pc-qc.due{border-color:#f4d6a6;background:#fffaf2}
+  .pc-qc.ok{border-color:#b8e3da;background:#f1faf7}
+  .pc-qc.chg{border-color:#f3c2c2;background:#fff6f6}
+  .pc-qck{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;font-weight:800;color:var(--muted)}
+  .pc-open{margin-left:auto;font-weight:800;color:var(--accent-ink);white-space:nowrap}
+  .pc-qcd summary{cursor:pointer}
+  .pc-qcd[open] .pc-open{opacity:.6}
+  .pc-card .qcrow{flex-basis:auto;margin-top:6px}
+  .pc-more summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--accent-ink);list-style:none;padding:2px 0}
+  .pc-more summary::-webkit-details-marker{display:none}
+  .pc-more summary::before{content:'\25B8  '}
+  .pc-more[open] summary::before{content:'\25BE  '}
+  .pc-more[open]{display:flex;flex-direction:column;gap:7px}
+  .pc-more .facts{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12.5px;margin:0}
+  .pc-more .actions{display:flex;flex-wrap:wrap;gap:6px;margin:0}
   .pc-tgt{font-size:12.5px;color:var(--muted)}
   .pc-card .cassign{display:flex;align-items:center;gap:8px}
-  .pc-card .qcrow{flex-basis:auto;margin-top:2px}   /* the QC box keeps its own height inside the card's column */
   .gp-team .gcta{margin:0}
   .gcard{border:1px solid var(--line);border-radius:11px;background:#fff;padding:12px 13px 13px;
     display:flex;flex-direction:column;gap:7px;min-height:196px}
@@ -6682,47 +6733,136 @@ function rejBox(r){
 }
 
 /* Picture cards for blogs, pages and LinkedIn articles (hub.json "picture_cards", Jhen 20/11/2026).
-   The GBP picture card look for the rest of the month: a picture on top, the status edge, the type
-   and go-live date, the title and one line on what it is about, Read & comment, then Approve,
-   Not approved and Comment along the bottom. The team sees everything the old card had in a Team only
-   strip; a client login never gets it. Every button keeps the data attribute the month already wires,
-   so no handler changes. itemCard and clientCard are untouched and still used when the switch is off.
-   The picture: the LinkedIn banner, or the first photo in the written article. Article HTML is not in
-   the hub's article index, so the month's covers are fetched once (read only) and dropped in place. */
-const PCCOVER = {}, PCWANT = new Set();
+   The GBP picture card look for the rest of the month: a picture on top, a tinted body in the status
+   colour, the type and go-live date, the title and one line on what it is about, Read & comment (it pulses
+   while the client's input is wanted), View live page once there is a link, the newest comment in a small
+   social-style strip, then Approve and Not approved. The team gets a tidy Team only strip: status row,
+   one QC line on every card (the checklist opens from it), the publishing buttons, and everything else
+   under More. Every control keeps the data attribute the month already wires, so no handler changes.
+   itemCard and clientCard are untouched and still used when the switch is off.
+   The picture: the LinkedIn banner, or the first photo in the written article. Article HTML and the
+   comments are not in the hub's article index, so they are fetched (read only) per month and dropped in. */
+if (typeof CFG !== 'undefined' && CFG.picCards) document.documentElement.classList.add('pcon');
+const PCCOVER = {}, PCCMT = {}, PCCMTN = {}, PCWANT = new Set(), PCMORE = new Set();
 let PCTIMER = null;
+function pcQueue(id){ PCWANT.add(id); if (!PCTIMER) PCTIMER = setTimeout(pcLoad, 0); }
 function pcCover(r){
   if (r.deliverable === 'linkedin_article' && r.banner_url) return r.banner_url;
   if (!ARTICLES[r.id]) return '';
-  if (r.id in PCCOVER) return PCCOVER[r.id];
-  PCWANT.add(r.id);
-  if (!PCTIMER) PCTIMER = setTimeout(pcLoadCovers, 0);
-  return '';
+  if (!(r.id in PCCOVER)) pcQueue(r.id);
+  return PCCOVER[r.id] || '';
 }
-async function pcLoadCovers(){
+function pcComments(r){
+  if (!ARTICLES[r.id]) return [];
+  const n = OPENCOMMENTS[r.id] || 0;
+  if (!(r.id in PCCMT) || PCCMTN[r.id] !== n) pcQueue(r.id);
+  return PCCMT[r.id] || [];
+}
+async function pcLoad(){
   const ids = [...PCWANT]; PCWANT.clear(); PCTIMER = null;
   if (!ids.length) return;
-  const { data, error } = await sb.from('ch_item_articles').select('item_id,html').in('item_id', ids);
-  if (error) return;
-  ids.forEach(id => { PCCOVER[id] = ''; });
-  (data || []).forEach(a => {
-    const m = String(a.html || '').match(/<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/i);
-    PCCOVER[a.item_id] = m && /^https:\/\//i.test(m[1]) ? m[1] : '';
-  });
+  const need = ids.filter(id => !(id in PCCOVER));
+  const [a, c] = await Promise.all([
+    need.length ? sb.from('ch_item_articles').select('item_id,html').in('item_id', need) : Promise.resolve({ data: [] }),
+    sb.from('ch_item_comments').select('item_id,author_name,author_kind,body,status,created_at').in('item_id', ids).order('created_at', { ascending: false })
+  ]);
+  if (!a.error) {
+    need.forEach(id => { PCCOVER[id] = ''; });
+    (a.data || []).forEach(x => {
+      const m = String(x.html || '').match(/<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/i);
+      PCCOVER[x.item_id] = m && /^https:\/\//i.test(m[1]) ? m[1] : '';
+    });
+  }
+  if (!c.error) {
+    ids.forEach(id => { PCCMT[id] = []; PCCMTN[id] = OPENCOMMENTS[id] || 0; });
+    (c.data || []).forEach(x => { (PCCMT[x.item_id] = PCCMT[x.item_id] || []).push(x); });
+  }
   ids.forEach(id => {
-    if (!PCCOVER[id]) return;
-    document.querySelectorAll('[data-pcimg="' + id + '"]').forEach(box => {
+    if (PCCOVER[id]) document.querySelectorAll('[data-pcimg="' + id + '"]').forEach(box => {
+      if (box.querySelector('img')) return;
       box.classList.remove('pc-ph');
       box.querySelectorAll('.pc-phin').forEach(x => x.remove());
       const img = document.createElement('img'); img.src = PCCOVER[id]; img.alt = ''; img.loading = 'lazy';
       box.appendChild(img);
     });
+    document.querySelectorAll('[data-pccmt="' + id + '"]').forEach(box => { box.innerHTML = pcCmtHtml(id); box.hidden = !box.innerHTML; });
   });
 }
 function pcType(r){
   if (r.deliverable === 'linkedin_article') return 'LinkedIn article';
   return TYPE_LABEL[r.stream] || 'Blog';
 }
+function pcAgo(ts){
+  const s = Math.max(0, (Date.now() - new Date(ts).getTime()) / 1000);
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm ago';
+  if (s < 86400) return Math.round(s / 3600) + 'h ago';
+  if (s < 86400 * 7) return Math.round(s / 86400) + 'd ago';
+  return ausDate(String(new Date(ts).toISOString()).slice(0, 10));
+}
+function pcInitials(name){
+  const p = String(name || '?').trim().split(/\s+/);
+  return esc(((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase());
+}
+// One comment bubble: a round initials picture, the name, the time and two lines of the comment.
+function pcBubble(name, label, kind, when, text){
+  return '<div class="pc-cm ' + esc(kind) + '"><span class="pc-av">' + pcInitials(name) + '</span>'
+    + '<div class="pc-cmb"><div class="pc-cmh"><b>' + esc(name) + '</b>' + (label ? '<span class="pc-cmk">' + esc(label) + '</span>' : '')
+    + (when ? '<span class="pc-cmt">' + esc(when) + '</span>' : '') + '</div>'
+    + '<div class="pc-cmx">' + esc(text) + '</div></div></div>';
+}
+// The newest comment from Read & comment, with "View all N comments", which opens the pop-up.
+function pcCmtHtml(id){
+  const list = PCCMT[id] || [];
+  if (!list.length) return '';
+  const c = list[0];
+  return pcBubble(c.author_name || '', c.author_kind === 'client' ? 'Client' : 'Ready to Rank', c.author_kind === 'client' ? 'cl' : 'tm',
+      c.created_at ? pcAgo(c.created_at) : '', c.body || '')
+    + '<button type="button" class="pc-cmall" data-read="' + esc(id) + '">'
+    + (list.length > 1 ? 'View all ' + list.length + ' comments' : 'Open the comment') + '</button>';
+}
+// One QC line on every blog, page and LinkedIn card, in every state. The full checklist opens from it.
+function pcQc(r, staff){
+  const a = ARTICLES[r.id], li = r.deliverable === 'linkedin_article';
+  let line, cls = '';
+  if (!a) line = 'Not written yet';
+  else if (a.released_at) {
+    const ok = a.qc_status === 'approved' && a.qc_name;
+    line = ok ? '&#10003; QC passed by <b>' + esc(a.qc_name) + '</b>' : (li ? 'With the client' : 'With the client, not QC checked');
+    cls = ok ? ' ok' : '';
+  }
+  else if (a.qc_status === 'approved') { line = '&#10003; QC approved by <b>' + esc(a.qc_name || '') + '</b>' + (r.review_on ? ', to the client ' + esc(ausDate(r.review_on)) : ''); cls = ' ok'; }
+  else if (a.qc_status === 'changes') { line = 'Sent back by <b>' + esc(a.qc_name || '') + '</b>'; cls = ' chg'; }
+  else { line = 'Ready for QC'; cls = ' due'; }
+  const body = qcPanel(r, staff);
+  if (!body) return '<div class="pc-qc' + cls + '"><span class="pc-qck">QC</span><span>' + line + '</span></div>';
+  const id = esc(r.id);
+  return '<details class="pc-qcd" data-pcmore="qc-' + id + '"' + (PCMORE.has('qc-' + r.id) ? ' open' : '') + '>'
+    + '<summary class="pc-qc' + cls + '"><span class="pc-qck">QC</span><span>' + line + '</span><span class="pc-open">'
+    + (li ? 'Open' : 'Open checklist') + '</span></summary>' + body + '</details>';
+}
+// Remember which folds are open, so a re-render of the month keeps them open.
+if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('toggle', e => {
+  const d = e.target; if (!d || !d.dataset || !d.dataset.pcmore) return;
+  if (d.open) PCMORE.add(d.dataset.pcmore); else PCMORE.delete(d.dataset.pcmore);
+}, true);
+// Noindex removed when the page has no link yet: suggest one from the client's site and the page's
+// target address, save it the way Links & brief does, then run the existing Noindex removed button.
+if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-pcnoindex]'); if (!b) return;
+  const id = b.dataset.pcnoindex, it = ITEMS.find(x => x.id === id); if (!it) return;
+  const site = (ITEMS.map(x => x.live_url).find(u => /^https?:\/\//i.test(u || '')) || '').replace(/^(https?:\/\/[^/]+).*$/i, '$1');
+  const guess = it.target_url ? (/^https?:\/\//i.test(it.target_url) ? it.target_url : site + (it.target_url.startsWith('/') ? '' : '/') + it.target_url) : site;
+  const url = (prompt('The live address of "' + it.title + '". Check it, then press OK.', guess) || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\/[^\s]+$/i.test(url)) { badge('That does not look like a web address.', 'err'); return; }
+  b.disabled = true; badge('Saving…');
+  const { error } = await sb.rpc('ch_set_item_links', { p_item_id: id, p_doc_url: it.doc_url || null, p_live_url: url });
+  b.disabled = false;
+  if (error) { badge('Could not save the page address.', 'err'); return; }
+  it.live_url = url;
+  const real = b.closest('.pc-card') && b.closest('.pc-card').querySelector('[data-noindex="' + id + '"]');
+  if (real) real.click();
+});
 function picCard(r, staff){
   const id = esc(r.id), st = esc(r.client_status), fs = esc(r.funnel_stage || '');
   const li = r.deliverable === 'linkedin_article', pg = isPage(r);
@@ -6733,8 +6873,8 @@ function picCard(r, staff){
   const n = INTERNAL[r.id] || {};
   const am = (ARTICLES[r.id] || {}).meta || {};
   const cover = pcCover(r);
-  const link = (url, cls, label) => url
-    ? '<a class="dl '+cls+'" href="'+esc(url)+'" target="_blank" rel="noopener">'+label+'</a>' : '';
+  const cmts = pcComments(r);
+  const isLive = r.client_status === 'live';
 
   // The picture, or a branded panel until there is one.
   const pic = cover
@@ -6747,20 +6887,33 @@ function picCard(r, staff){
   const about = li ? (am.meta_description || r.meta_description || '') : (r.meta_description || '');
   const aboutLine = about ? esc(about) : (r.main_keyword ? 'About: <b>'+esc(r.main_keyword)+'</b>' : '');
 
-  // The main button: Read & comment, with the same fallbacks the client card uses.
+  // The main button, with the client card's fallbacks. It pulses while the client's input is wanted.
+  const wantsYou = !staff && ready && !done && !r.not_approved;
+  const pulse = wantsYou ? ' pc-pulse' : '';
   let read = '';
   if (ARTICLES[r.id]) {
-    read = '<button class="btn pc-read" type="button" data-read="'+id+'">'
+    read = '<button class="btn pc-read'+pulse+'" type="button" data-read="'+id+'">'
       + (pg ? '&#9654; Preview page &amp; comment' : '&#9654; Read &amp; comment')
       + (OPENCOMMENTS[r.id] ? '<span class="ccount">'+OPENCOMMENTS[r.id]+'</span>' : '') + '</button>';
   } else if (pg && r.live_url) {
-    read = '<a class="btn pc-read" href="'+esc(r.live_url)+'" target="_blank" rel="noopener">&#9654; View the page</a>';
+    read = '<a class="btn pc-read'+pulse+'" href="'+esc(r.live_url)+'" target="_blank" rel="noopener">&#9654; View the page</a>';
   } else if (r.doc_url) {
-    read = '<a class="btn pc-read" href="'+esc(r.doc_url)+'" target="_blank" rel="noopener">&#9654; Read the draft</a>';
+    read = '<a class="btn pc-read'+pulse+'" href="'+esc(r.doc_url)+'" target="_blank" rel="noopener">&#9654; Read the draft</a>';
   }
-  const wantsYou = ready && !done && !r.not_approved;
+  // View live: the client sees it once the piece is live; the team as soon as there is a link.
+  const liveLabel = li ? 'View on LinkedIn' : pg ? 'View live page' : 'View live post';
+  const live = r.live_url && (isLive || staff) && read.indexOf(esc(r.live_url)) < 0
+    ? '<a class="btn pc-live" href="'+esc(r.live_url)+'" target="_blank" rel="noopener">&#8599; '
+      + (isLive ? liveLabel : (pg ? 'View page (not indexed yet)' : 'View the link')) + '</a>' : '';
 
-  // Team only: everything the old admin card showed, nothing dropped.
+  // Feedback and old notes as bubbles, with the newest Read & comment comment below them.
+  const who = CLIENT_NAME || 'Client';
+  const fb = r.not_approved && !done && r.not_approved_reason
+    ? pcBubble(staff ? who : 'You', staff ? 'Not approved' : 'Feedback', 'pcfb', r.not_approved_at ? pcAgo(r.not_approved_at) : '', r.not_approved_reason) : '';
+  const note = r.client_notes ? pcBubble(staff ? who : 'You', 'Note', 'cl', '', r.client_notes) : '';
+  const cmt = '<div class="pc-cmts" data-pccmt="'+id+'"'+(cmts.length ? '' : ' hidden')+'>' + (cmts.length ? pcCmtHtml(r.id) : '') + '</div>';
+
+  // Team only: status row, QC line, publishing buttons, everything else under More. Nothing dropped.
   let team = '';
   if (staff) {
     const facts = [];
@@ -6771,7 +6924,6 @@ function picCard(r, staff){
     if (r.post_type) facts.push('<span class="ptype" style="margin:0">'+esc(POST_TYPE[r.post_type]||r.post_type)+'</span>');
     if (!CFG.stagePills) facts.push('<span class="sp '+st+'">'+esc(CLIENT_STATUS[r.client_status]||r.client_status)+'</span>');
     const blogState = CFG.stagePills ? itemStage(r) : blogStage(r);
-    if (blogState) facts.push('<span class="bstage '+blogState.cls+'">'+esc(blogState.label)+'</span>');
     const srcA = r.repurposed_from ? ARTICLES[r.repurposed_from] : null;
     const srcState = !srcA ? ' · blog not written yet'
       : ' · blog ' + (srcA.released_at ? 'with the client' : srcA.qc_status === 'approved' ? 'QC approved' : srcA.qc_status === 'changes' ? 'sent back' : 'ready for QC');
@@ -6780,35 +6932,44 @@ function picCard(r, staff){
         + (srcA ? ' <button class="linkbtn" type="button" data-read="'+esc(r.repurposed_from)+'">Open the blog</button>' : '') + '</div>'
       : (li ? '<div class="pc-tgt">LinkedIn series piece · includes its promotional post</div>' : '');
     const syncTag = li && am.sync_changed && am.sync_note ? '<span class="lisync">Updated to match blog edit, ' + esc(ausDate(String(am.sync_at || '').slice(0,10))) + '</span>' : '';
+    const pub = (ARTICLES[r.id] && !li
+        ? '<button class="notebtn wpbtn" type="button" data-wppack="'+id+'" title="HTML with headings, photos, SEO details and schema, ready for WordPress">WordPress pack</button>'
+          + '<button class="notebtn wpbtn" type="button" data-wpcopy="'+id+'" title="See the post and its HTML, then copy it for a WordPress Custom HTML block">View &amp; copy HTML</button>' : '')
+      + (ARTICLES[r.id] && li
+        ? '<button class="notebtn wpbtn" type="button" data-lipack="'+id+'" title="Article ready to paste, banner, meta and promo post">LinkedIn pack</button>' : '')
+      + (pg && r.approved && !isLive
+        ? (r.live_url
+            ? '<button class="notebtn wpbtn pc-noidx" type="button" data-noindex="'+id+'" title="Press once the noindex tag is off the live page">Noindex removed</button>'
+            : '<button class="notebtn wpbtn pc-noidx" type="button" data-pcnoindex="'+id+'" title="Press once the noindex tag is off the live page. It asks for the page address first.">Noindex removed</button>'
+              + '<button class="hide" type="button" data-noindex="'+id+'" tabindex="-1" aria-hidden="true"></button>')
+        : '');
     team = '<div class="gp-team pc-team"><span class="tl">Team only</span>'
-      + '<div class="facts">'+facts.join('')+'</div>'
-      + target + syncTag
-      + (r.secondary_note ? '<div class="why">'+esc(r.secondary_note)+'</div>' : '')
-      + '<div class="actions">'
-        + ((r.target_url || r.meta_description || r.target_query || (li && am.meta_title))
-            ? '<button class="notebtn" type="button" data-seo="'+id+'">'+(li ? 'Meta &amp; source' : 'Target URL &amp; meta')+'</button>' : '')
-        + '<button class="notebtn" type="button" data-links="'+id+'">Links &amp; brief</button>'
-        + '<button class="notebtn" type="button" data-assignbtn="'+id+'">Assign'
-          + (assignDot(r, staff) ? '<span class="notedot"></span>' : '') + '</button>'
-        + (ARTICLES[r.id] && !li
-            ? '<button class="notebtn wpbtn" type="button" data-wppack="'+id+'" title="HTML with headings, photos, SEO details and schema, ready for WordPress">WordPress pack</button>'
-              + '<button class="notebtn wpbtn" type="button" data-wpcopy="'+id+'" title="See the post and its HTML, then copy it for a WordPress Custom HTML block">View &amp; copy HTML</button>' : '')
-        + (ARTICLES[r.id] && li
-            ? '<button class="notebtn wpbtn" type="button" data-lipack="'+id+'" title="Article ready to paste, banner, meta and promo post">LinkedIn pack</button>' : '')
-        + link(r.doc_url, '', 'Draft') + link(r.live_url, 'live', pg ? 'View page' : 'Live')
-        + (pg && r.approved && r.live_url && r.client_status !== 'live'
-            ? '<button class="notebtn wpbtn" type="button" data-noindex="'+id+'" title="Press once the noindex tag is off the live page">Noindex removed</button>' : '')
-      + '</div>'
-      + '<div class="staffrow">'
+      + '<div class="pc-row">'
+        + (blogState ? '<span class="bstage '+blogState.cls+'">'+esc(blogState.label)+'</span>' : '')
         + '<span>Assigned to <b>'+esc(n.assignee ? PERSON(n.assignee) : 'Unassigned')+'</b></span>'
-        + (CFG.stagePills ? '' : '<span>Status <select data-status="'+id+'">'+statusOpts(r.id)+'</select></span>')
-        + '<span class="schedset" title="'+(r.approved ? (li ? 'The date this goes live on LinkedIn' : 'The date this goes live on the website') : 'Approve the content before scheduling it')+'">Go-live date '
-          + '<input type="date" data-sched="'+id+'" value="'+esc(r.scheduled_for||'')+'"'+(r.approved || r.scheduled_for ? '' : ' disabled')+'></span>'
-        + ((n.writer || n.publisher) ? '<span class="owners" style="margin:0;font-size:12px">Write: '+esc(PERSON(n.writer))
-            + ' · Publish: '+esc(PERSON(n.publisher))+'</span>' : '')
       + '</div>'
-      + (!one && isPlanned(r) && !li
-          ? '<label class="tickl"><input class="tick" type="checkbox" data-topic="'+id+'"'+(r.topic_approved?' checked':'')+'> Approve topic</label>' : '')
+      + '<div class="pc-row"><span class="schedset" title="'+(r.approved ? (li ? 'The date this goes live on LinkedIn' : 'The date this goes live on the website') : 'Approve the content before scheduling it')+'">Go-live date '
+          + '<input type="date" data-sched="'+id+'" value="'+esc(r.scheduled_for||'')+'"'+(r.approved || r.scheduled_for ? '' : ' disabled')+'></span></div>'
+      + pcQc(r, staff)
+      + (pub ? '<div class="pc-row pc-pub">' + pub + '</div>' : '')
+      + '<details class="pc-more" data-pcmore="more-'+id+'"'+(PCMORE.has('more-'+r.id) ? ' open' : '')+'><summary>More</summary>'
+        + '<div class="facts">'+facts.join('')+'</div>'
+        + target + syncTag
+        + (r.secondary_note ? '<div class="why">'+esc(r.secondary_note)+'</div>' : '')
+        + '<div class="actions">'
+          + ((r.target_url || r.meta_description || r.target_query || (li && am.meta_title))
+              ? '<button class="notebtn" type="button" data-seo="'+id+'">'+(li ? 'Meta &amp; source' : 'Target URL &amp; meta')+'</button>' : '')
+          + '<button class="notebtn" type="button" data-links="'+id+'">Links &amp; brief</button>'
+          + '<button class="notebtn" type="button" data-assignbtn="'+id+'">Assign'
+            + (assignDot(r, staff) ? '<span class="notedot"></span>' : '') + '</button>'
+          + (r.doc_url ? '<a class="dl" href="'+esc(r.doc_url)+'" target="_blank" rel="noopener">Draft</a>' : '')
+        + '</div>'
+        + (CFG.stagePills ? '' : '<div class="pc-row"><span>Status <select data-status="'+id+'">'+statusOpts(r.id)+'</select></span></div>')
+        + ((n.writer || n.publisher) ? '<div class="pc-row owners" style="margin:0;font-size:12px">Write: '+esc(PERSON(n.writer))
+            + ' · Publish: '+esc(PERSON(n.publisher))+'</div>' : '')
+        + (!one && isPlanned(r) && !li
+            ? '<label class="tickl"><input class="tick" type="checkbox" data-topic="'+id+'"'+(r.topic_approved?' checked':'')+'> Approve topic</label>' : '')
+      + '</details>'
     + '</div>';
   }
 
@@ -6819,38 +6980,37 @@ function picCard(r, staff){
       + (r.client_reviewer ? '<span class="cwho">' + esc((CLIENTPEOPLE.find(p => p.user_id === r.client_reviewer) || {}).full_name || '') + '</span>' : '')
       + '</div>' : '';
 
-  // Approve and Not approved stay the real tick boxes (the tours and handlers point at them),
-  // dressed as the GBP buttons.
+  // Approve stays the real tick box (the tours and handler point at it). Not approved works like the GBP
+  // card: the tick opens the feedback box, and once feedback is saved the button reads Update feedback.
   const okTitle = canTick ? 'Approve this item' : (!one && topicWaiting(r) ? 'Approve the topic first' : 'Not ready for approval yet');
   const noOk = staff || ready;
   const acts = '<div class="gp-acts pc-acts">'
     + '<label class="btn pc-tick pc-ok' + (done ? ' on' : '') + (canTick ? '' : ' off') + '" title="'+okTitle+'">'
       + '<input class="tick" type="checkbox" data-approve="'+id+'"'+(done?' checked':'')+(canTick?'':' disabled')+'> '
       + (done ? '&#10003; Approved' : (li ? 'Approve article' : 'Approve content')) + '</label>'
-    + '<label class="btn pc-tick pc-no' + (r.not_approved ? ' on' : '') + (noOk ? '' : ' off') + '" title="Tell us what needs changing">'
-      + '<input class="tick" type="checkbox" data-reject="'+id+'"'+(r.not_approved?' checked':'')+(noOk ? '' : ' disabled')+'> Not approved</label>'
-    + '<button type="button" class="btn ghost" data-note="'+id+'">' + (r.client_notes ? 'Edit comment' : 'Comment') + '</button>'
+    + (r.not_approved
+        ? '<button type="button" class="btn pc-tick pc-no on" data-gprej="'+id+'">Update feedback</button>'
+          + '<input type="checkbox" class="hide" data-reject="'+id+'" checked tabindex="-1" aria-hidden="true">'
+        : '<label class="btn pc-tick pc-no' + (noOk ? '' : ' off') + '" title="Tell us what needs changing">'
+          + '<input class="tick" type="checkbox" data-reject="'+id+'"'+(noOk ? '' : ' disabled')+'> Not approved</label>')
+    + (!one ? '<button type="button" class="btn ghost pc-note" data-note="'+id+'">' + (r.client_notes ? 'Edit notes' : 'Notes') + '</button>' : '')
   + '</div>';
 
   let out = '<div class="gp-card pc-card st-'+statusKey(r)+(done ? ' s-done' : '')+'" id="'+esc(r.anchor)+'" data-id="'+id+'">'
     + pic
     + '<div class="gp-in">'
       + '<div class="gp-type">' + esc(pcType(r))
-        + (r.scheduled_for ? ' &middot; ' + (r.client_status === 'live' ? 'Went live ' : 'Goes live ') + esc(ausDate(r.scheduled_for)) : '') + '</div>'
+        + (r.scheduled_for ? ' &middot; ' + (isLive ? 'Went live ' : 'Goes live ') + esc(ausDate(r.scheduled_for)) : '') + '</div>'
       + '<h3>' + esc(r.title) + '</h3>'
       + (aboutLine ? '<div class="gp-sub pc-about">' + aboutLine + '</div>' : '')
-      + (read ? '<div class="pc-readrow">' + read + (wantsYou && !staff ? READ_HINT : '') + '</div>' : '')
-      + (r.not_approved && !done && r.not_approved_reason
-          ? '<div class="gp-fb"><b>' + (staff ? 'Client feedback' : 'Your feedback') + '</b>' + esc(r.not_approved_reason) + '</div>' : '')
-      + (r.client_notes
-          ? '<div class="gp-cm"><b>' + (staff ? 'Comment' : 'Your comment') + '</b>' + esc(r.client_notes) + '</div>' : '')
+      + (read || live ? '<div class="pc-readrow">' + read + live + '</div>' : '')
+      + fb + note + cmt
       + cAssign
       + team
-      + qcPanel(r, staff)
       + acts
-      + rejBox(r)
+      + rejBox(r).replace('rejbox saved"', 'rejbox saved hide"')
       + assignPanel(r, staff)
-      + '<div class="panel" id="note-'+id+'" hidden><label>Comment on this '+(li ? 'article' : pg ? 'page' : 'blog')+'</label>'
+      + '<div class="panel" id="note-'+id+'" hidden><label>Notes on this '+(li ? 'article' : pg ? 'page' : 'blog')+'</label>'
         + '<textarea class="note" style="width:100%;min-height:80px;font-size:14.5px" data-notefor="'+id+'" placeholder="Anything you want changed before we publish?">'
         + esc(r.client_notes||'')+'</textarea></div>';
   if (staff) {
