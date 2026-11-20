@@ -535,6 +535,8 @@
   .pc-phk{font-family:var(--mono);font-size:13px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;
     color:#fff;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);border-radius:20px;padding:5px 14px}
   .pc-phs{font-size:13px;font-weight:700;color:rgba(255,255,255,.85)}
+  .pc-kw{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;font-size:13px;color:var(--muted)}
+  .pc-kw b{color:var(--ink-dk)}
   .pc-about{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;min-height:2.8em}
   .pc-readrow{display:flex;flex-direction:column;gap:7px;margin-top:2px}
   .pc-read,.pc-live{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;
@@ -6890,6 +6892,14 @@ function pcGpCard(r, staff){
     const nb = pcBubble(staff ? who : 'You', staff ? 'Not approved' : 'Feedback', 'pcfb', r.not_approved_at ? pcAgo(r.not_approved_at) : '', r.not_approved_reason);
     h = h.replace('<div class="gp-fb"><b>' + (staff ? 'Client feedback' : 'Your feedback') + '</b>' + esc(r.not_approved_reason) + '</div>', () => nb);
   }
+  // Copy caption for whoever uploads the post: the caption and its hashtags, exactly as written.
+  if (staff && r.post_body) {
+    const tags = (r.hashtags || []).map(t => '#' + String(t).replace(/^#+/, '')).join(' ');
+    const cap = r.post_body + (tags ? '\n\n' + tags : '');
+    h = h.replace('<div class="gp-team"><span class="tl">Team only</span>', m => m
+      + '<div class="gcta"><span class="gctab">Caption</span><span class="gurl">' + esc(String(r.post_body).slice(0, 60)) + '&hellip;</span>'
+      + '<button class="copybtn gctac" type="button" data-copy="' + esc(cap) + '">Copy caption</button></div>');
+  }
   if (r.client_notes) {
     const nb = pcBubble(staff ? who : 'You', 'Comment', 'cl', '', r.client_notes);
     h = h.replace('<div class="gp-cm"><b>' + (staff ? 'Comment' : 'Your comment') + '</b>' + esc(r.client_notes) + '</div>', () => nb);
@@ -6921,6 +6931,31 @@ async function pcArtQC(itemId, ver){
   renderArtQC(itemId);
   return true;
 }
+if (typeof CFG !== 'undefined' && CFG.picCards) document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-pcpublish]'); if (!b) return;
+  const id = b.dataset.pcpublish, it = ITEMS.find(x => x.id === id); if (!it) return;
+  const li = it.deliverable === 'linkedin_article';
+  const card = b.closest('.pc-card'), dIn = card && card.querySelector('[data-sched="' + id + '"]');
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
+  const date = (dIn && dIn.value) || it.scheduled_for || today;
+  const site = (ITEMS.map(x => x.live_url).find(u => /^https?:\/\//i.test(u || '') && !/linkedin\.com/i.test(u)) || '').replace(/^(https?:\/\/[^/]+).*$/i, '$1');
+  const guess = it.live_url || (li ? 'https://www.linkedin.com/pulse/'
+    : it.target_url ? (/^https?:\/\//i.test(it.target_url) ? it.target_url : site + (it.target_url.startsWith('/') ? '' : '/') + it.target_url) : site);
+  const url = (prompt('The live link of "' + it.title + '"' + (li ? ' on LinkedIn' : '') + '. Check it, then press OK.', guess) || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\/[^\s]+$/i.test(url)) { badge('That does not look like a web address.', 'err'); return; }
+  if (!confirm(date > today
+      ? 'Goes live ' + ausDate(date) + '. It shows Scheduled until then and turns Published by itself on the day. Change the Go-live date on the card first if that is wrong.'
+      : 'Mark it Published (' + ausDate(date) + ')?')) return;
+  b.disabled = true; badge('Saving…');
+  const { data, error } = await sb.rpc('ch_mark_published', { p_item_id: id, p_live_url: url, p_date: date });
+  b.disabled = false;
+  if (error) { badge(error.message || 'Could not save.', 'err'); return; }
+  Object.assign(it, { live_url: url, scheduled_for: date, client_status: data });
+  badge(data === 'live' ? 'Published.' : 'Scheduled for ' + ausDate(date) + '. It turns Published on the day.', 'ok');
+  const t = TABLIST.find(x => x.monthKey === it.month_key);
+  if (t && typeof refreshMonth === 'function') refreshMonth(t);
+});
 function picCard(r, staff){
   const id = esc(r.id), st = esc(r.client_status), fs = esc(r.funnel_stage || '');
   const li = r.deliverable === 'linkedin_article', pg = isPage(r);
@@ -6941,9 +6976,16 @@ function picCard(r, staff){
       + '<div class="pc-phin"><span class="pc-phk">'+esc(pcType(r))+'</span>'
       + '<span class="pc-phs">'+(ARTICLES[r.id] ? 'Photo to come' : 'Being written')+'</span></div></div>';
 
-  // One line on what it is about.
-  const about = li ? (am.meta_description || r.meta_description || '') : (r.meta_description || '');
-  const aboutLine = about ? esc(about) : (r.main_keyword ? 'About: <b>'+esc(r.main_keyword)+'</b>' : '');
+  // Team only: the keyword and its numbers, above the main button (Jhen 20/11/2026). Clients see none of it.
+  const kw = [];
+  if (staff) {
+    if (r.main_keyword) kw.push('Keyword: <b>'+esc(r.main_keyword)+'</b>');
+    if (r.search_volume !== null && r.search_volume !== undefined) kw.push(volCell(r.search_volume)+' / month');
+    if (r.difficulty !== null && r.difficulty !== undefined) kw.push(kdPill(r.difficulty));
+    if (fs) kw.push('<span class="stage '+fs+'" style="margin:0">'+fs+'</span>');
+    if (r.post_type) kw.push('<span class="ptype" style="margin:0">'+esc(POST_TYPE[r.post_type]||r.post_type)+'</span>');
+    if (!CFG.stagePills) kw.push('<span class="sp '+st+'">'+esc(CLIENT_STATUS[r.client_status]||r.client_status)+'</span>');
+  }
 
   // The main button, with the client card's fallbacks. It pulses while the client's input is wanted.
   const wantsYou = !staff && ready && !done && !r.not_approved;
@@ -6974,60 +7016,46 @@ function picCard(r, staff){
   // Team only: status row, QC line, publishing buttons, everything else under More. Nothing dropped.
   let team = '';
   if (staff) {
-    const facts = [];
-    if (r.main_keyword) facts.push('Keyword: <b>'+esc(r.main_keyword)+'</b>');
-    if (r.search_volume !== null && r.search_volume !== undefined) facts.push(volCell(r.search_volume)+' / month');
-    if (r.difficulty !== null && r.difficulty !== undefined) facts.push(kdPill(r.difficulty));
-    if (fs) facts.push('<span class="stage '+fs+'" style="margin:0">'+fs+'</span>');
-    if (r.post_type) facts.push('<span class="ptype" style="margin:0">'+esc(POST_TYPE[r.post_type]||r.post_type)+'</span>');
-    if (!CFG.stagePills) facts.push('<span class="sp '+st+'">'+esc(CLIENT_STATUS[r.client_status]||r.client_status)+'</span>');
     const blogState = CFG.stagePills ? itemStage(r) : blogStage(r);
-    const srcA = r.repurposed_from ? ARTICLES[r.repurposed_from] : null;
-    const srcState = !srcA ? ' · blog not written yet'
-      : ' · blog ' + (srcA.released_at ? 'with the client' : srcA.qc_status === 'approved' ? 'QC approved' : srcA.qc_status === 'changes' ? 'sent back' : 'ready for QC');
-    const target = r.repurposed_from ? '<div class="pc-tgt">Repurposes the blog: <b>'
-        + esc((ITEMS.find(x => x.id === r.repurposed_from)||{}).title || 'a blog')+'</b> · includes 1 promotional post' + esc(srcState)
-        + (srcA ? ' <button class="linkbtn" type="button" data-read="'+esc(r.repurposed_from)+'">Open the blog</button>' : '') + '</div>'
-      : (li ? '<div class="pc-tgt">LinkedIn series piece · includes its promotional post</div>' : '');
     const syncTag = li && am.sync_changed && am.sync_note ? '<span class="lisync">Updated to match blog edit, ' + esc(ausDate(String(am.sync_at || '').slice(0,10))) + '</span>' : '';
-    const pub = (ARTICLES[r.id] && !li
+    // Mark published (blogs and LinkedIn), the twin of Noindex removed on pages: saves the live link and
+    // the go-live date. A future date shows Scheduled and turns Published by itself on the day.
+    const canMark = (r.deliverable === 'blog' || li) && r.approved && !isLive;
+    const marked = canMark && r.client_status === 'scheduled' && r.live_url;
+    const pub = '<button class="notebtn wpbtn" type="button" data-seo="'+id+'" title="Copy the URL, meta title and meta description">'+(li ? 'Meta &amp; source' : 'Target URL &amp; meta')+'</button>'
+      + (ARTICLES[r.id] && !li
         ? '<button class="notebtn wpbtn" type="button" data-wppack="'+id+'" title="HTML with headings, photos, SEO details and schema, ready for WordPress">WordPress pack</button>'
           + '<button class="notebtn wpbtn" type="button" data-wpcopy="'+id+'" title="See the post and its HTML, then copy it for a WordPress Custom HTML block">View &amp; copy HTML</button>' : '')
       + (ARTICLES[r.id] && li
         ? '<button class="notebtn wpbtn" type="button" data-lipack="'+id+'" title="Article ready to paste, banner, meta and promo post">LinkedIn pack</button>' : '')
+      + (canMark
+        ? '<button class="notebtn wpbtn pc-noidx" type="button" data-pcpublish="'+id+'" title="Press once it is scheduled or live. It asks for the live link and uses the Go-live date.">'
+          + (marked ? 'Scheduled ' + esc(ausDate(r.scheduled_for)) + ' &middot; edit' : 'Mark published') + '</button>' : '')
       + (pg && r.approved && !isLive
         ? (r.live_url
             ? '<button class="notebtn wpbtn pc-noidx" type="button" data-noindex="'+id+'" title="Press once the noindex tag is off the live page">Noindex removed</button>'
             : '<button class="notebtn wpbtn pc-noidx" type="button" data-pcnoindex="'+id+'" title="Press once the noindex tag is off the live page. It asks for the page address first.">Noindex removed</button>'
               + '<button class="hide" type="button" data-noindex="'+id+'" tabindex="-1" aria-hidden="true"></button>')
-        : '');
+        : '')
+      // Old Google Doc links and briefs stay reachable, but only on cards that have one.
+      + (n.brief || r.doc_url ? '<button class="notebtn wpbtn" type="button" data-links="'+id+'">Brief &amp; links</button>' : '');
     team = '<div class="gp-team pc-team"><span class="tl">Team only</span>'
       + '<div class="pc-row">'
         + (blogState ? '<span class="bstage '+blogState.cls+'">'+esc(blogState.label)+'</span>' : '')
         + '<span>Assigned to <b>'+esc(n.assignee ? PERSON(n.assignee) : 'Unassigned')+'</b></span>'
+        + '<button class="linkbtn" type="button" data-assignbtn="'+id+'">Change' + (assignDot(r, staff) ? '<span class="notedot"></span>' : '') + '</button>'
       + '</div>'
       + '<div class="pc-row"><span class="schedset" title="'+(r.approved ? (li ? 'The date this goes live on LinkedIn' : 'The date this goes live on the website') : 'Approve the content before scheduling it')+'">Go-live date '
-          + '<input type="date" data-sched="'+id+'" value="'+esc(r.scheduled_for||'')+'"'+(r.approved || r.scheduled_for ? '' : ' disabled')+'></span></div>'
+          + '<input type="date" data-sched="'+id+'" value="'+esc(r.scheduled_for||'')+'"'+(r.approved || r.scheduled_for ? '' : ' disabled')+'></span>'
+        + syncTag + '</div>'
       + pcQc(r, staff)
-      + (pub ? '<div class="pc-row pc-pub">' + pub + '</div>' : '')
-      + '<details class="pc-more" data-pcmore="more-'+id+'"'+(PCMORE.has('more-'+r.id) ? ' open' : '')+'><summary>More</summary>'
-        + '<div class="facts">'+facts.join('')+'</div>'
-        + target + syncTag
-        + (r.secondary_note ? '<div class="why">'+esc(r.secondary_note)+'</div>' : '')
-        + '<div class="actions">'
-          + ((r.target_url || r.meta_description || r.target_query || (li && am.meta_title))
-              ? '<button class="notebtn" type="button" data-seo="'+id+'">'+(li ? 'Meta &amp; source' : 'Target URL &amp; meta')+'</button>' : '')
-          + '<button class="notebtn" type="button" data-links="'+id+'">Links &amp; brief</button>'
-          + '<button class="notebtn" type="button" data-assignbtn="'+id+'">Assign'
-            + (assignDot(r, staff) ? '<span class="notedot"></span>' : '') + '</button>'
-          + (r.doc_url ? '<a class="dl" href="'+esc(r.doc_url)+'" target="_blank" rel="noopener">Draft</a>' : '')
-        + '</div>'
-        + (CFG.stagePills ? '' : '<div class="pc-row"><span>Status <select data-status="'+id+'">'+statusOpts(r.id)+'</select></span></div>')
-        + ((n.writer || n.publisher) ? '<div class="pc-row owners" style="margin:0;font-size:12px">Write: '+esc(PERSON(n.writer))
-            + ' · Publish: '+esc(PERSON(n.publisher))+'</div>' : '')
-        + (!one && isPlanned(r) && !li
-            ? '<label class="tickl"><input class="tick" type="checkbox" data-topic="'+id+'"'+(r.topic_approved?' checked':'')+'> Approve topic</label>' : '')
-      + '</details>'
+      + '<div class="pc-row pc-pub">' + pub + '</div>'
+      // Only on hubs that still use them (none of the one-stage, stage-pill hubs do).
+      + (CFG.stagePills ? '' : '<div class="pc-row"><span>Status <select data-status="'+id+'">'+statusOpts(r.id)+'</select></span></div>')
+      + ((n.writer || n.publisher) ? '<div class="pc-row owners" style="margin:0;font-size:12px">Write: '+esc(PERSON(n.writer))
+          + ' · Publish: '+esc(PERSON(n.publisher))+'</div>' : '')
+      + (!one && isPlanned(r) && !li
+          ? '<label class="tickl"><input class="tick" type="checkbox" data-topic="'+id+'"'+(r.topic_approved?' checked':'')+'> Approve topic</label>' : '')
     + '</div>';
   }
 
@@ -7060,7 +7088,7 @@ function picCard(r, staff){
       + '<div class="gp-type">' + esc(pcType(r))
         + (r.scheduled_for ? ' &middot; ' + (isLive ? 'Went live ' : 'Goes live ') + esc(ausDate(r.scheduled_for)) : '') + '</div>'
       + '<h3>' + esc(r.title) + '</h3>'
-      + (aboutLine && staff ? '<div class="gp-sub pc-about">' + aboutLine + '</div>' : '')
+      + (kw.length ? '<div class="pc-kw">' + kw.join('') + '</div>' : '')
       + (read || live ? '<div class="pc-readrow">' + read + live + '</div>' : '')
       + fb + note + cmt
       + cAssign
@@ -7077,8 +7105,13 @@ function picCard(r, staff){
                  + copyRow('Banner alt text', am.banner_alt, false, false)
                  + (r.repurposed_from ? copyRow('Source blog', (ITEMS.find(x => x.id === r.repurposed_from)||{}).live_url || r.target_url, true, false) : '')
                : copyRow('Target URL', r.target_url, true, false)
-                 + copyRow('Meta description', r.meta_description, false, true))
+                 + (am.meta_title ? copyRow('Meta title', am.meta_title, false, false) : '')
+                 + copyRow('Meta description', am.meta_description || r.meta_description, false, true))
          + copyRow('Primary keyword', r.main_keyword, false, false)
+         + (r.repurposed_from ? '<div class="pc-tgt">Repurposes the blog: <b>'
+             + esc((ITEMS.find(x => x.id === r.repurposed_from)||{}).title || 'a blog')+'</b>'
+             + (ARTICLES[r.repurposed_from] ? ' <button class="linkbtn" type="button" data-read="'+esc(r.repurposed_from)+'">Open the blog</button>' : '') + '</div>' : '')
+         + (r.secondary_note ? '<div class="why">'+esc(r.secondary_note)+'</div>' : '')
          + '</div>';
     const brief = n.brief;
     out += '<div class="panel" id="links-'+id+'" hidden>'
