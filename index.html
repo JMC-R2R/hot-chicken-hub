@@ -5838,8 +5838,8 @@ $('liCopy').addEventListener('click', async () => {
    approved or Comment is kept as a draft on this device until it is sent, so nothing typed is lost. */
 let SP_ROWS = [], SP_OPEN = {}, SP_MONTHS = {}, SP_BRIEFS = {}, SP_MONTH = null, SP_BRIEF_EDIT = {};
 const SP_KIND = { post:'Static', story:'Story', reel:'Reel', carousel:'Carousel' };
-// Jhen 24/11/2026: four groups in this order, so a month reads like the plan Archie and the client expect.
-const SP_GROUPS = [['Statics', 'post'], ['Carousels', 'carousel'], ['Reels', 'reel'], ['Stories', 'story']];
+// Jhen 24/11/2026: three groups in this order. Reels and stories share one group, since Archie makes both.
+const SP_GROUPS = [['Statics', ['post']], ['Carousels', ['carousel']], ['Reels and stories', ['reel', 'story']]];
 const spDraftKey = (id, box) => 'sp-draft:' + id + ':' + box;
 const spDraft = (id, box) => { try { return localStorage.getItem(spDraftKey(id, box)) || ''; } catch (e) { return ''; } };
 const spDraftSet = (id, box, v) => { try { v ? localStorage.setItem(spDraftKey(id, box), v) : localStorage.removeItem(spDraftKey(id, box)); } catch (e) {} };
@@ -5999,8 +5999,8 @@ function spPaint(el){
     h += '<div class="sp-sum"><span><b>' + (mr.length - appr - chg) + '</b> waiting</span><span><b>' + appr + '</b> approved</span>'
        + (chg ? '<span><b>' + chg + '</b> with changes requested</span>' : '') + '</div>';
   }
-  for (const [lab, kind] of SP_GROUPS) {
-    const g = mr.filter(r => (SP_KIND[r.kind] ? r.kind : 'post') === kind); if (!g.length) continue;
+  for (const [lab, kinds] of SP_GROUPS) {
+    const g = mr.filter(r => kinds.includes(SP_KIND[r.kind] ? r.kind : 'post')); if (!g.length) continue;
     h += '<div class="sp-sub">' + lab + ' &middot; ' + g.length + '</div><div class="gp-grid">' + g.map(spCard).join('') + '</div>';
   }
   body.innerHTML = h;
