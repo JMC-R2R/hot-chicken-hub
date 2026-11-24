@@ -503,6 +503,20 @@
   .sp-pill{font-size:12px;font-weight:800;border-radius:20px;padding:3px 10px;background:#eef1f4;color:#4a5866}
   .sp-pill.ok{background:#dcf3e6;color:#1c7c54}.sp-pill.chg{background:#fde2e0;color:#b42318}
   .sp-saved{font-size:12.5px;font-weight:700;color:#1c7c54}
+  /* Jhen 24/11/2026: month cards, release bar, placeholders and the team brief on the Social posts tab. */
+  #spBody .mstrip{margin:4px 14px 0}
+  .sp-rel{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:8px 14px 0;
+    padding:11px 14px;border:1.5px dashed var(--line);border-radius:12px;font-size:14px;color:var(--ink)}
+  .sp-rel.on{border-style:solid;border-color:#9fd9b8;background:#effaf3}
+  .sp-rel .btn[disabled]{opacity:.5;cursor:not-allowed}
+  .sp-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;
+    background:linear-gradient(135deg,var(--accent-fill) 0%,var(--ink-dk) 100%)}
+  .sp-brief{border-top:1px dashed var(--line);margin-top:4px;padding-top:9px;display:flex;flex-direction:column;gap:7px}
+  .sp-brief .tl{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .sp-brief .sp-btxt{white-space:pre-wrap;font-size:13.5px;line-height:1.5;color:var(--ink);background:var(--soft);border-radius:8px;padding:8px 10px}
+  .sp-brief textarea{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;resize:vertical;min-height:110px}
+  .sp-brief .row{display:flex;gap:8px;flex-wrap:wrap}
+  .sp-brief > .btn{align-self:flex-start}
   .sp-box{display:flex;flex-direction:column;gap:6px}
   .sp-box label{font-size:13px;font-weight:800;color:var(--ink-dk)}
   .sp-box textarea{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;resize:vertical;min-height:72px}
@@ -3674,8 +3688,8 @@ function expandTabs(){
     let at = -1; out.forEach((x, i) => { if (x.monthKey !== undefined || x.key === 'suggestions') at = i; });
     out.splice(at + 1 || out.length, 0, { key:'socialposts', audience:'all', enabled:true, title:'Social posts', short:'Social posts',
       intro: ME.kind === 'internal'
-        ? 'Instagram and Facebook posts and stories for this client. The client approves each one, asks for changes or comments, and the team is told in Slack.'
-        : 'Your Instagram and Facebook posts and stories. Approve each one, tell us what to change, or leave a comment. Every click saves straight away.' });
+        ? 'Statics, carousels, reels and stories for this client, month by month. Build a month here with a team brief on each card, then release it once every graphic, video and caption is in. The client approves each post and the team is told in Slack.'
+        : 'Your social media posts, month by month: statics, carousels, reels and stories with their captions. Approve each one, tell us what to change, or leave a comment. Every click saves straight away.' });
   }
   // One number per tab BUTTON: every month shares the Content plan tab's number.
   let n = 0, planNum = null;
@@ -3746,7 +3760,8 @@ function selectTab(key, scroll){
   }
   const btnKey = String(key).startsWith('month:') ? 'plan' : key;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.key===btnKey));
-  const strip = document.querySelector('#panel-'+cssId(key)+' .mstrip');
+  // Content plan months only: the Social posts tab has its own month strip (Jhen 24/11/2026).
+  const strip = String(key).startsWith('month:') && document.querySelector('#panel-'+cssId(key)+' .mstrip');
   if (strip) strip.outerHTML = monthStrip(key);
   document.querySelectorAll('.tab-panel').forEach(p =>
     p.classList.toggle('active', p.id === 'panel-'+cssId(key)));
@@ -5821,48 +5836,129 @@ $('liCopy').addEventListener('click', async () => {
    picture card look. Every decision saves at once through ch_social_post_act, which checks access
    on the server, logs it and tells the team in the client's Slack channel. Text typed into Not
    approved or Comment is kept as a draft on this device until it is sent, so nothing typed is lost. */
-let SP_ROWS = [], SP_OPEN = {};
-const SP_KIND = { post:'Post', story:'Story', reel:'Reel', carousel:'Carousel' };
+let SP_ROWS = [], SP_OPEN = {}, SP_MONTHS = {}, SP_BRIEFS = {}, SP_MONTH = null, SP_BRIEF_EDIT = {};
+const SP_KIND = { post:'Static', story:'Story', reel:'Reel', carousel:'Carousel' };
+// Jhen 24/11/2026: four groups in this order, so a month reads like the plan Archie and the client expect.
+const SP_GROUPS = [['Statics', 'post'], ['Carousels', 'carousel'], ['Reels', 'reel'], ['Stories', 'story']];
 const spDraftKey = (id, box) => 'sp-draft:' + id + ':' + box;
 const spDraft = (id, box) => { try { return localStorage.getItem(spDraftKey(id, box)) || ''; } catch (e) { return ''; } };
 const spDraftSet = (id, box, v) => { try { v ? localStorage.setItem(spDraftKey(id, box), v) : localStorage.removeItem(spDraftKey(id, box)); } catch (e) {} };
 const spWhen = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-AU', { day:'numeric', month:'short', hour:'numeric', minute:'2-digit', hour12:true }); };
 const spDay = ds => { const d = new Date(ds + 'T00:00:00'); return isNaN(d) ? ds : d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short' }); };
+// A card is ready for the client once it has its picture or video and its caption.
+const spReady = r => !!(r.media_url && r.caption);
+const spReleased = mk => !!(SP_MONTHS[mk] && SP_MONTHS[mk].released_at);
+const spNextMonth = mk => { const [y, m] = mk.split('-').map(Number); const d = new Date(y, m, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
 async function spLoad(el){
-  const { data, error } = await sb.from('ch_social_posts').select('*').eq('client_id', CLIENT_ID)
-    .order('publish_date', { ascending: true }).order('sort', { ascending: true });
+  const staff = ME.kind === 'internal';
+  // The database only hands the client posts from released months (ch_social_posts_select), so a month
+  // the team is still building never reaches the client, whatever this page does.
+  const [posts, months, briefs] = await Promise.all([
+    sb.from('ch_social_posts').select('*').eq('client_id', CLIENT_ID).order('publish_date', { ascending: true }).order('sort', { ascending: true }),
+    sb.from('ch_social_months').select('*').eq('client_id', CLIENT_ID),
+    staff ? sb.from('ch_social_briefs').select('*').eq('client_id', CLIENT_ID) : Promise.resolve({ data: [] })
+  ]);
   const body = el.querySelector('#spBody');
-  if (error) { body.innerHTML = '<p class="empty">Could not load the social posts: ' + esc(error.message) + '</p>'; return; }
-  SP_ROWS = data || [];
+  if (posts.error) { body.innerHTML = '<p class="empty">Could not load the social posts: ' + esc(posts.error.message) + '</p>'; return; }
+  SP_ROWS = posts.data || [];
+  SP_MONTHS = {}; (months.data || []).forEach(m => { SP_MONTHS[m.month_key] = m; });
+  SP_BRIEFS = {}; (briefs.data || []).forEach(b => { SP_BRIEFS[b.post_id] = b; });
   // A draft left on this device opens its box again, so the person sees it was kept.
   SP_ROWS.forEach(r => { if (spDraft(r.id, 'chg')) SP_OPEN[r.id] = 'chg'; else if (spDraft(r.id, 'cm')) SP_OPEN[r.id] = 'cm'; });
   spPaint(el);
   if (!el._spWired) { el._spWired = true; spWire(el); }
 }
+function spMonthKeys(){
+  const staff = ME.kind === 'internal';
+  const keys = [...new Set(SP_ROWS.map(r => r.month_key))].filter(Boolean);
+  return (staff ? keys : keys.filter(spReleased)).sort();
+}
+function spPickMonth(keys){
+  if (SP_MONTH && keys.includes(SP_MONTH)) return SP_MONTH;
+  const staff = ME.kind === 'internal';
+  // Open on the first month that still needs someone: for the client, posts waiting on them;
+  // for the team, a month not yet released or still being approved.
+  const open = keys.find(mk => SP_ROWS.some(r => r.month_key === mk && r.status !== 'approved') && (staff || spReleased(mk)));
+  return open || keys[keys.length - 1];
+}
+function spMonthStrip(keys){
+  const staff = ME.kind === 'internal';
+  const cards = keys.map(mk => {
+    const mr = SP_ROWS.filter(r => r.month_key === mk);
+    const ok = mr.filter(r => r.status === 'approved').length, ready = mr.filter(spReady).length, rel = spReleased(mk);
+    const allDone = mr.length > 0 && ok === mr.length;
+    const [num, den, word] = staff && !rel ? [ready, mr.length, 'ready'] : [ok, mr.length, 'approved'];
+    const pct = den ? Math.round(num / den * 100) : 0;
+    return '<button type="button" class="mcard' + (mk === SP_MONTH ? ' on' : '') + (allDone ? ' done' : '') + '" data-spmonth="' + esc(mk) + '">'
+      + '<span class="mn">' + (mr.length) + ' items</span><span class="mm">' + esc(monthName(mk)) + '</span>'
+      + '<span class="mp">' + num + ' of ' + den + ' ' + word + '</span><span class="mbar"><i style="width:' + pct + '%"></i></span>'
+      + (allDone ? '<span class="mtag done">&#10003; All approved</span>'
+         : staff ? (rel ? '<span class="mtag done">With the client</span>' : '<span class="mtag">Client can\'t see yet</span>') : '')
+      + '</button>';
+  });
+  // The client sees the next month as coming up, so a month that is still being made reads as planned, not missing.
+  if (!staff && keys.length) {
+    cards.push('<div class="mcard locked" aria-disabled="true"><span class="mn">Coming up</span><span class="mm">'
+      + esc(monthName(spNextMonth(keys[keys.length - 1]))) + '</span><span class="lockrow">' + LOCK_SVG + ' Opens when it is ready for you</span></div>');
+  }
+  return cards.length ? '<div class="mstrip" role="tablist" aria-label="Months">' + cards.join('') + '</div>' : '';
+}
+function spReleaseBar(mk){
+  if (ME.kind !== 'internal') return '';
+  const mr = SP_ROWS.filter(r => r.month_key === mk), ready = mr.filter(spReady).length, m = SP_MONTHS[mk];
+  if (spReleased(mk)) {
+    return '<div class="sp-rel on"><span>&#10003; Released to the client' + (m.released_by ? ' by <b>' + esc(m.released_by) + '</b>' : '')
+      + ', ' + esc(spWhen(m.released_at)) + '</span><button type="button" class="btn ghost" data-sprel="hide">Take back from the client</button></div>';
+  }
+  const all = mr.length > 0 && ready === mr.length;
+  return '<div class="sp-rel"><span><b>' + ready + ' of ' + mr.length + '</b> ready. '
+    + (all ? 'Every graphic, video and caption is in.' : 'The client sees this month once every card has its graphic or video and its caption.')
+    + '</span><button type="button" class="btn' + (all ? ' gp-ok' : '') + '" data-sprel="show"' + (all ? '' : ' disabled') + '>Release '
+    + esc(monthName(mk)) + ' to the client</button></div>';
+}
+function spBriefBox(r){
+  if (ME.kind !== 'internal') return '';
+  const b = SP_BRIEFS[r.id], id = esc(r.id);
+  if (SP_BRIEF_EDIT[r.id]) {
+    return '<div class="sp-brief"><span class="tl">' + LOCK_SVG + ' Team brief</span>'
+      + '<textarea id="spb-' + id + '" placeholder="Concept, shots, on-screen text, who makes it">' + esc(b ? b.brief : '') + '</textarea>'
+      + '<div class="row"><button type="button" class="btn" data-sp="savebrief">Save brief</button><button type="button" class="btn ghost" data-sp="cancelbrief">Cancel</button></div></div>';
+  }
+  return '<div class="sp-brief"><span class="tl">' + LOCK_SVG + ' Team brief' + (b && b.made_by ? ' &middot; ' + esc(b.made_by) : '') + '</span>'
+    + (b && b.brief ? '<div class="sp-btxt">' + esc(b.brief) + '</div>' : '<div class="gp-sub">No brief yet.</div>')
+    + '<button type="button" class="btn ghost" data-sp="editbrief">' + (b && b.brief ? 'Edit brief' : 'Add brief') + '</button></div>';
+}
 function spCard(r){
-  const id = esc(r.id), K = SP_KIND[r.kind] || 'Post', k = K.toLowerCase();
+  const id = esc(r.id), K = SP_KIND[r.kind] || 'Static', k = K.toLowerCase();
   const done = r.status === 'approved', chg = r.status === 'changes', staff = ME.kind === 'internal';
+  const rel = spReleased(r.month_key), b = SP_BRIEFS[r.id];
+  const maker = (b && b.made_by) || (r.kind === 'reel' || r.kind === 'story' ? 'Archie' : 'the team');
   const media = r.media_url
     ? (r.media_type === 'video' ? '<video src="' + esc(r.media_url) + '#t=1" controls playsinline preload="metadata"></video>'
                                 : '<img src="' + esc(r.media_url) + '" alt="" loading="lazy">')
-    : '';
+    : '<div class="sp-ph"><span class="pc-phk">' + K + '</span><span class="pc-phs">Being made by ' + esc(maker) + '</span></div>';
   const box = SP_OPEN[r.id];
   const last = [r.status_at ? { at: r.status_at, t: (done ? 'Approved' : chg ? 'Feedback sent' : 'Decision taken back') + ' by ' + (r.status_by || '') }
                             : null,
                 r.comment_at ? { at: r.comment_at, t: (r.comment ? 'Comment saved' : 'Comment removed') + ' by ' + (r.comment_by || '') } : null]
                .filter(Boolean).sort((a, b) => b.at.localeCompare(a.at))[0];
-  return '<div class="gp-card ' + (done ? 'st-ok' : chg ? 'st-chg' : '') + '" data-spid="' + id + '">'
-    + '<div class="sp-media' + (r.kind === 'story' ? ' story' : '') + '"><span class="sp-kind">' + K + '</span>' + media + '</div>'
+  // Before release the team sees what is missing instead of the client's approval buttons.
+  const prep = staff && !rel;
+  const missing = [!r.media_url ? (r.kind === 'reel' || r.kind === 'story' ? 'video' : 'graphic') : null, !r.caption ? 'caption' : null].filter(Boolean);
+  return '<div class="gp-card ' + (done ? 'st-ok' : chg ? 'st-chg' : prep && missing.length ? 'st-soon' : '') + '" data-spid="' + id + '">'
+    + '<div class="sp-media' + (r.kind === 'story' || r.kind === 'reel' ? ' story' : '') + '"><span class="sp-kind">' + K + '</span>' + media + '</div>'
     + '<div class="gp-in">'
       + '<div class="gp-type">' + esc(spDay(r.publish_date)) + ((r.platforms || []).length ? ' &middot; ' + esc(r.platforms.map(x => x[0].toUpperCase() + x.slice(1)).join(' + ')) : '') + '</div>'
       + ((r.service || r.pillar) ? '<div class="sp-tags">' + (r.service ? '<span class="sp-tag">' + esc(r.service) + '</span>' : '') + (r.pillar ? '<span class="sp-tag">' + esc(r.pillar) + '</span>' : '') + '</div>' : '')
       + (r.caption ? '<div class="sp-cap">' + esc(r.caption) + '</div>' : '<div class="gp-sub">The caption is being written.</div>')
       + (r.client_note ? '<div class="sp-note">' + esc(r.client_note) + '</div>' : '')
-      + '<div class="sp-st">' + (done ? '<span class="sp-pill ok">&#10003; Approved</span>' : chg ? '<span class="sp-pill chg">Changes requested</span>' : '<span class="sp-pill">' + (staff ? 'Waiting on the client' : 'Waiting on you') + '</span>') + '</div>'
+      + (prep
+          ? '<div class="sp-st">' + (missing.length ? '<span class="sp-pill">Still needs: ' + esc(missing.join(' and ')) + '</span>' : '<span class="sp-pill ok">&#10003; Ready</span>') + '</div>'
+          : '<div class="sp-st">' + (done ? '<span class="sp-pill ok">&#10003; Approved</span>' : chg ? '<span class="sp-pill chg">Changes requested</span>' : '<span class="sp-pill">' + (staff ? 'Waiting on the client' : 'Waiting on you') + '</span>') + '</div>')
       + (chg && r.feedback ? '<div class="gp-fb"><b>' + (staff ? 'Client feedback' : 'Your feedback') + (r.status_by ? ' (' + esc(r.status_by) + ')' : '') + '</b>' + esc(r.feedback) + '</div>' : '')
       + (r.comment ? '<div class="gp-cm"><b>Comment' + (r.comment_by ? ' from ' + esc(r.comment_by) : '') + '</b>' + esc(r.comment) + '</div>' : '')
       + (last ? '<div class="sp-saved">&#10003; Saved: ' + esc(last.t) + ', ' + esc(spWhen(last.at)) + '</div>' : '')
-      + (box === 'chg'
+      + (prep ? '' : box === 'chg'
           ? '<div class="sp-box"><label for="spt-' + id + '">What would you like us to change?</label>'
             + '<textarea id="spt-' + id + '" data-spdraft="chg" placeholder="For example: can we use a different photo?">' + esc(spDraft(r.id, 'chg') || (chg ? r.feedback || '' : '')) + '</textarea>'
             + '<span class="sp-draft" data-spdraftnote>' + (spDraft(r.id, 'chg') ? 'Draft kept on this device. Press Send feedback to save it.' : 'Your text is kept as you type. Press Send feedback to save it.') + '</span>'
@@ -5875,30 +5971,37 @@ function spCard(r){
             + (r.comment ? '<button type="button" class="btn ghost" data-sp="delcm">Remove comment</button>' : '')
             + '<button type="button" class="btn ghost" data-sp="cancel">Cancel</button></div></div>'
           : '')
-      + '<div class="gp-acts">'
+      + (prep ? '' : '<div class="gp-acts">'
         + (done
             ? '<button type="button" class="btn ghost" data-sp="undo">Undo approval</button>'
             : '<button type="button" class="btn gp-ok" data-sp="approve">Approve ' + k + '</button>'
               + '<button type="button" class="btn gp-no" data-sp="chg">' + (chg ? 'Update feedback' : 'Not approved') + '</button>')
         + (chg ? '<button type="button" class="btn ghost" data-sp="undo">Withdraw feedback</button>' : '')
         + '<button type="button" class="btn ghost sp-cmb" data-sp="cm">' + (r.comment ? 'Edit comment' : 'Comment') + '</button>'
-      + '</div>'
+      + '</div>')
+      + spBriefBox(r)
     + '</div></div>';
 }
 function spPaint(el){
   const body = el.querySelector('#spBody'); if (!body) return;
-  if (!SP_ROWS.length) { body.innerHTML = '<p class="empty">No social posts yet. They will appear here for your approval.</p>'; return; }
-  const appr = SP_ROWS.filter(r => r.status === 'approved').length, chg = SP_ROWS.filter(r => r.status === 'changes').length;
-  let h = '<div class="sp-sum"><span><b>' + (SP_ROWS.length - appr - chg) + '</b> waiting</span><span><b>' + appr + '</b> approved</span>'
-        + (chg ? '<span><b>' + chg + '</b> with changes requested</span>' : '') + '</div>';
-  const months = [...new Set(SP_ROWS.map(r => r.month_key))];
-  for (const m of months) {
-    const mr = SP_ROWS.filter(r => r.month_key === m);
-    h += '<h3 class="sp-month">' + esc(monthName(m)) + '<span>' + mr.length + ' items</span></h3>';
-    for (const [lab, test] of [['Posts', r => r.kind !== 'story'], ['Stories', r => r.kind === 'story']]) {
-      const g = mr.filter(test); if (!g.length) continue;
-      h += '<div class="sp-sub">' + lab + ' &middot; ' + g.length + '</div><div class="gp-grid">' + g.map(spCard).join('') + '</div>';
-    }
+  const keys = spMonthKeys();
+  if (!keys.length) {
+    body.innerHTML = '<p class="empty">' + (ME.kind === 'internal' ? 'No social posts yet.' : 'Your first month of posts is being made. It will appear here for your approval as soon as it is ready.') + '</p>';
+    return;
+  }
+  SP_MONTH = spPickMonth(keys);
+  const mr = SP_ROWS.filter(r => r.month_key === SP_MONTH);
+  const appr = mr.filter(r => r.status === 'approved').length, chg = mr.filter(r => r.status === 'changes').length;
+  let h = spMonthStrip(keys)
+        + '<h3 class="sp-month">' + esc(monthName(SP_MONTH)) + '<span>' + mr.length + ' items</span></h3>'
+        + spReleaseBar(SP_MONTH);
+  if (ME.kind !== 'internal' || spReleased(SP_MONTH)) {
+    h += '<div class="sp-sum"><span><b>' + (mr.length - appr - chg) + '</b> waiting</span><span><b>' + appr + '</b> approved</span>'
+       + (chg ? '<span><b>' + chg + '</b> with changes requested</span>' : '') + '</div>';
+  }
+  for (const [lab, kind] of SP_GROUPS) {
+    const g = mr.filter(r => (SP_KIND[r.kind] ? r.kind : 'post') === kind); if (!g.length) continue;
+    h += '<div class="sp-sub">' + lab + ' &middot; ' + g.length + '</div><div class="gp-grid">' + g.map(spCard).join('') + '</div>';
   }
   body.innerHTML = h;
 }
@@ -5926,9 +6029,32 @@ function spWire(el){
     const n = card.querySelector('[data-spdraftnote]'); if (n) n.textContent = 'Draft kept on this device. Press ' + (ta.dataset.spdraft === 'chg' ? 'Send feedback' : 'Save comment') + ' to save it.';
   });
   el.addEventListener('click', async e => {
+    const mc = e.target.closest('[data-spmonth]');
+    if (mc) { SP_MONTH = mc.dataset.spmonth; spPaint(el); return; }
+    const rb = e.target.closest('[data-sprel]');
+    if (rb) {
+      const show = rb.dataset.sprel === 'show', mk = SP_MONTH;
+      if (!confirm(show ? 'Release ' + monthName(mk) + ' to the client? They will see every post in it and can start approving.'
+                        : 'Take ' + monthName(mk) + ' back from the client? They will stop seeing it until it is released again.')) return;
+      rb.disabled = true; badge('Saving…');
+      const { data, error } = await sb.rpc('ch_social_month_release', { p_client: CLIENT_ID, p_month: mk, p_release: show });
+      if (error) { badge(error.message && error.message.length < 140 ? error.message : 'Could not save that. Please try again.', 'err'); rb.disabled = false; return; }
+      if (data && data.month_key) SP_MONTHS[mk] = data;
+      badge('Saved', 'ok'); spPaint(el); return;
+    }
     const b = e.target.closest('[data-sp]'); if (!b) return;
     const card = b.closest('[data-spid]'); const r = card && SP_ROWS.find(x => x.id === card.dataset.spid); if (!r) return;
     const a = b.dataset.sp;
+    if (a === 'editbrief') { SP_BRIEF_EDIT[r.id] = true; spPaint(el); const t = el.querySelector('#spb-' + CSS.escape(r.id)); if (t) t.focus(); return; }
+    if (a === 'cancelbrief') { delete SP_BRIEF_EDIT[r.id]; spPaint(el); return; }
+    if (a === 'savebrief') {
+      const v = ((card.querySelector('#spb-' + CSS.escape(r.id)) || {}).value || '').trim();
+      b.disabled = true; badge('Saving…');
+      const row = Object.assign({}, SP_BRIEFS[r.id] || {}, { post_id: r.id, client_id: CLIENT_ID, brief: v || null, updated_by: ME.name, updated_at: new Date().toISOString() });
+      const { error } = await sb.from('ch_social_briefs').upsert(row, { onConflict: 'post_id' });
+      if (error) { badge('Could not save the brief. Please try again.', 'err'); b.disabled = false; return; }
+      SP_BRIEFS[r.id] = row; delete SP_BRIEF_EDIT[r.id]; badge('Saved', 'ok'); spPaint(el); return;
+    }
     if (a === 'chg' || a === 'cm') { SP_OPEN[r.id] = a; spPaint(el); const t = el.querySelector('#spt-' + CSS.escape(r.id)); if (t) t.focus(); return; }
     if (a === 'cancel') { delete SP_OPEN[r.id]; spDraftSet(r.id, 'chg', ''); spDraftSet(r.id, 'cm', ''); spPaint(el); return; }
     b.disabled = true;
