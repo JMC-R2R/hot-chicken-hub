@@ -505,6 +505,7 @@
   .sp-saved{font-size:12.5px;font-weight:700;color:#1c7c54}
   /* Jhen 24/11/2026: month cards, release bar, placeholders and the team brief on the Social posts tab. */
   #spBody .mstrip{margin:4px 14px 0}
+  .sp-none{margin:4px 14px 12px;font-size:13.5px;color:var(--muted)}
   .sp-rel{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:8px 14px 0;
     padding:11px 14px;border:1.5px dashed var(--line);border-radius:12px;font-size:14px;color:var(--ink)}
   .sp-rel.on{border-style:solid;border-color:#9fd9b8;background:#effaf3}
@@ -5848,6 +5849,8 @@ const spDay = ds => { const d = new Date(ds + 'T00:00:00'); return isNaN(d) ? ds
 // A card is ready for the client once it has its picture or video and its caption.
 const spReady = r => !!(r.media_url && r.caption);
 const spReleased = mk => !!(SP_MONTHS[mk] && SP_MONTHS[mk].released_at);
+// LinkedIn articles are ch_items rows (writer, banner, Read & comment and approval all unchanged).
+const spLinkedIn = mk => ITEMS.filter(r => r.stream === 'linkedin' && (mk === undefined || r.month_key === mk));
 const spNextMonth = mk => { const [y, m] = mk.split('-').map(Number); const d = new Date(y, m, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
 async function spLoad(el){
   const staff = ME.kind === 'internal';
@@ -5870,7 +5873,7 @@ async function spLoad(el){
 }
 function spMonthKeys(){
   const staff = ME.kind === 'internal';
-  const keys = [...new Set(SP_ROWS.map(r => r.month_key))].filter(Boolean);
+  const keys = [...new Set(SP_ROWS.map(r => r.month_key).concat(staff ? spLinkedIn().map(r => r.month_key) : []))].filter(Boolean);
   return (staff ? keys : keys.filter(spReleased)).sort();
 }
 function spPickMonth(keys){
@@ -5884,13 +5887,15 @@ function spPickMonth(keys){
 function spMonthStrip(keys){
   const staff = ME.kind === 'internal';
   const cards = keys.map(mk => {
-    const mr = SP_ROWS.filter(r => r.month_key === mk);
-    const ok = mr.filter(r => r.status === 'approved').length, ready = mr.filter(spReady).length, rel = spReleased(mk);
-    const allDone = mr.length > 0 && ok === mr.length;
-    const [num, den, word] = staff && !rel ? [ready, mr.length, 'ready'] : [ok, mr.length, 'approved'];
+    const mr = SP_ROWS.filter(r => r.month_key === mk), li = spLinkedIn(mk);
+    const ok = mr.filter(r => r.status === 'approved').length + li.filter(r => r.approved).length;
+    const ready = mr.filter(spReady).length, rel = spReleased(mk), all = mr.length + li.length;
+    const allDone = all > 0 && ok === all;
+    // Before release the team counts posts ready (the release gate); after it, everything approved.
+    const [num, den, word] = staff && !rel ? [ready, mr.length, 'posts ready'] : [ok, all, 'approved'];
     const pct = den ? Math.round(num / den * 100) : 0;
     return '<button type="button" class="mcard' + (mk === SP_MONTH ? ' on' : '') + (allDone ? ' done' : '') + '" data-spmonth="' + esc(mk) + '">'
-      + '<span class="mn">' + (mr.length) + ' items</span><span class="mm">' + esc(monthName(mk)) + '</span>'
+      + '<span class="mn">' + all + ' items</span><span class="mm">' + esc(monthName(mk)) + '</span>'
       + '<span class="mp">' + num + ' of ' + den + ' ' + word + '</span><span class="mbar"><i style="width:' + pct + '%"></i></span>'
       + (allDone ? '<span class="mtag done">&#10003; All approved</span>'
          : staff ? (rel ? '<span class="mtag done">With the client</span>' : '<span class="mtag">Client can\'t see yet</span>') : '')
@@ -5990,21 +5995,38 @@ function spPaint(el){
     return;
   }
   SP_MONTH = spPickMonth(keys);
-  const mr = SP_ROWS.filter(r => r.month_key === SP_MONTH);
+  const mr = SP_ROWS.filter(r => r.month_key === SP_MONTH), li = spLinkedIn(SP_MONTH), staff = ME.kind === 'internal';
   const appr = mr.filter(r => r.status === 'approved').length, chg = mr.filter(r => r.status === 'changes').length;
   let h = spMonthStrip(keys)
-        + '<h3 class="sp-month">' + esc(monthName(SP_MONTH)) + '<span>' + mr.length + ' items</span></h3>'
+        + '<h3 class="sp-month">' + esc(monthName(SP_MONTH)) + '<span>' + (mr.length + li.length) + ' items</span></h3>'
         + spReleaseBar(SP_MONTH);
   if (ME.kind !== 'internal' || spReleased(SP_MONTH)) {
     h += '<div class="sp-sum"><span><b>' + (mr.length - appr - chg) + '</b> waiting</span><span><b>' + appr + '</b> approved</span>'
        + (chg ? '<span><b>' + chg + '</b> with changes requested</span>' : '') + '</div>';
   }
   for (const [lab, kinds] of SP_GROUPS) {
-    const g = mr.filter(r => kinds.includes(SP_KIND[r.kind] ? r.kind : 'post')); if (!g.length) continue;
+    const g = mr.filter(r => kinds.includes(SP_KIND[r.kind] ? r.kind : 'post'));
+    // The team sees every group, so a gap in the month is obvious; the client only sees what is there.
+    if (!g.length) { if (staff) h += '<div class="sp-sub">' + lab + ' &middot; 0</div><p class="sp-none">None planned this month.</p>'; continue; }
     h += '<div class="sp-sub">' + lab + ' &middot; ' + g.length + '</div><div class="gp-grid">' + g.map(spCard).join('') + '</div>';
   }
+  // LinkedIn: the Content plan's own cards, so the article reader, comments and approval work as before.
+  if (li.length) {
+    h += '<div class="sp-sub">LinkedIn articles &middot; ' + li.length + '</div>'
+       + (CFG.picCards ? '<div class="gp-grid">' + pcSort(li).map(r => itemCard(r, staff)).join('') + '</div>'
+                       : li.map(r => itemCard(r, staff)).join(''));
+  } else if (staff) {
+    h += '<div class="sp-sub">LinkedIn articles &middot; 0</div><p class="sp-none">None planned this month.</p>';
+  }
   body.innerHTML = h;
+  if (li.length) wireMonthBrief(el, TABLIST.find(x => x.monthKey === SP_MONTH) || { key: 'month:' + SP_MONTH, monthKey: SP_MONTH, monthLabel: monthName(SP_MONTH) });
 }
+// A LinkedIn card action re-renders its Content plan month; repaint this tab too so it shows the change.
+function spRepaint(){ const el = $('panel-socialposts'); if (el && el._spWired) spPaint(el); }
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('[data-gosocial]');
+  if (a) { e.preventDefault(); selectTab('socialposts'); }
+});
 async function spAct(el, r, action, note){
   badge('Saving…');
   const { data, error } = await sb.rpc('ch_social_post_act', { p_id: r.id, p_action: action, p_note: note ?? null });
@@ -6581,6 +6603,14 @@ function monthBriefMarkup(t){
   for (const stream of STREAM_ORDER) {
     const sr = rows.filter(r => r.stream === stream);
     if (!sr.length) continue;
+    // Jhen 24/11/2026: with the Social posts tab on, LinkedIn lives there with the month's posts. The
+    // same cards cannot sit on two tabs (their ids would clash), so the Content plan points across.
+    if (stream === 'linkedin' && CFG.socialPosts) {
+      body += '<div class="typehead"><span class="badge '+(TYPE_BADGE[stream]||'b-soc')+'">'+esc(TYPE_LABEL[stream]||stream)+'</span><h3>'
+            + esc(TYPE_HEAD[stream]||stream)+'</h3><span class="tc">'+sr.length+' '+(sr.length===1?'item':'items')+'</span></div>'
+            + '<p class="empty">LinkedIn articles are on the <a href="#" data-gosocial>Social posts</a> tab, with this month\'s posts.</p>';
+      continue;
+    }
     body += '<div class="typehead"><span class="badge '+(TYPE_BADGE[stream]||'b-blog')+'">'
           + esc(TYPE_LABEL[stream]||stream)+'</span><h3>'+esc(TYPE_HEAD[stream]||stream)+'</h3>'
           + '<span class="tc">'+sr.length+' '+(sr.length===1?'item':'items')+'</span></div>';
@@ -8108,6 +8138,7 @@ function wireMonthBrief(el, t){
 
 /* Re-render a month tab without losing whichever note or link rows are open. */
 function refreshMonth(t){
+  if (CFG.socialPosts && typeof spRepaint === 'function') spRepaint();
   const el = $('panel-'+cssId(t.key));
   if (!el) return;
   const open = [...el.querySelectorAll('.noterow, .panel')].filter(r => !r.hidden).map(r => r.id);
