@@ -5875,7 +5875,10 @@ const spDay = ds => { const d = new Date(ds + 'T00:00:00'); return isNaN(d) ? ds
 const spReady = r => !!(r.media_url && r.caption);
 const spReleased = mk => !!(SP_MONTHS[mk] && SP_MONTHS[mk].released_at);
 // LinkedIn articles are ch_items rows (writer, banner, Read & comment and approval all unchanged).
-const spLinkedIn = mk => ITEMS.filter(r => r.stream === 'linkedin' && (mk === undefined || r.month_key === mk));
+// They move to this tab ONLY on a socials-only hub (no blogs, pages or GBP, like Gluten Free World). A client
+// with a Content plan as well keeps LinkedIn there (Jhen 25/11/2026, replacing the 24/11 rule).
+const spLiInSocial = () => !!CFG.socialPosts && !ITEMS.some(r => r.stream !== 'linkedin' && r.stream !== 'social');
+const spLinkedIn = mk => spLiInSocial() ? ITEMS.filter(r => r.stream === 'linkedin' && (mk === undefined || r.month_key === mk)) : [];
 const spNextMonth = mk => { const [y, m] = mk.split('-').map(Number); const d = new Date(y, m, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
 async function spLoad(el){
   const staff = ME.kind === 'internal';
@@ -6040,7 +6043,7 @@ function spPaint(el){
     h += '<div class="sp-sub">LinkedIn articles &middot; ' + li.length + '</div>'
        + (CFG.picCards ? '<div class="gp-grid">' + pcSort(li).map(r => itemCard(r, staff)).join('') + '</div>'
                        : li.map(r => itemCard(r, staff)).join(''));
-  } else if (staff) {
+  } else if (staff && spLiInSocial()) {
     h += '<div class="sp-sub">LinkedIn articles &middot; 0</div><p class="sp-none">None planned this month.</p>';
   }
   body.innerHTML = h;
@@ -6628,9 +6631,9 @@ function monthBriefMarkup(t){
   for (const stream of STREAM_ORDER) {
     const sr = rows.filter(r => r.stream === stream);
     if (!sr.length) continue;
-    // Jhen 24/11/2026: with the Social posts tab on, LinkedIn lives there with the month's posts. The
-    // same cards cannot sit on two tabs (their ids would clash), so the Content plan points across.
-    if (stream === 'linkedin' && CFG.socialPosts) {
+    // On a socials-only hub LinkedIn lives on the Social posts tab (spLiInSocial). The same cards cannot sit
+    // on two tabs (their ids would clash), so the Content plan points across.
+    if (stream === 'linkedin' && spLiInSocial()) {
       body += '<div class="typehead"><span class="badge '+(TYPE_BADGE[stream]||'b-soc')+'">'+esc(TYPE_LABEL[stream]||stream)+'</span><h3>'
             + esc(TYPE_HEAD[stream]||stream)+'</h3><span class="tc">'+sr.length+' '+(sr.length===1?'item':'items')+'</span></div>'
             + '<p class="empty">LinkedIn articles are on the <a href="#" data-gosocial>Social posts</a> tab, with this month\'s posts.</p>';
