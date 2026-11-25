@@ -493,6 +493,16 @@
   .un-card{position:absolute;top:10px;right:10px;z-index:3;min-width:24px;height:24px;font-size:12.5px;border-radius:12px}
   .mcard .unb{position:absolute;top:-8px;right:-8px}
   .tab-btn .unb{margin-left:6px;vertical-align:2px}
+  /* Jhen 25/11/2026: the number must look like an alert, not decoration. A wiggle every few seconds and a ring
+     that pulses out from it; a still number with the ring for anyone who has motion turned off. */
+  .unb{animation:unWiggle 3.2s ease-in-out infinite;transform-origin:50% 60%}
+  .unb::after{content:'';position:absolute;inset:-2px;border-radius:inherit;border:2px solid #e11d48;
+    animation:unRing 1.6s ease-out infinite;pointer-events:none}
+  .tab-btn .unb{position:relative}
+  @keyframes unWiggle{0%,72%,100%{transform:rotate(0) scale(1)}76%{transform:rotate(-14deg) scale(1.15)}
+    80%{transform:rotate(12deg) scale(1.15)}84%{transform:rotate(-9deg) scale(1.1)}88%{transform:rotate(6deg) scale(1.05)}92%{transform:rotate(0) scale(1)}}
+  @keyframes unRing{0%{opacity:.85;transform:scale(1)}100%{opacity:0;transform:scale(1.9)}}
+  @media (prefers-reduced-motion: reduce){ .unb{animation:none} .unb::after{animation:none;opacity:.5} }
   .un-all{appearance:none;border:0;background:#ffe4e9;color:#9f1239;font:inherit;font-size:12.5px;font-weight:800;border-radius:20px;
     padding:4px 11px;cursor:pointer;margin-left:auto}
   .un-all:hover{background:#fecdd6}
