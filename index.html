@@ -497,13 +497,24 @@
   .wn-st.no{background:#f1f3f5;color:#4a5866;font-weight:600}
   .wn-by{font-weight:600;opacity:.8}
   .wn-x{background:none;border:0;padding:0;font:inherit;font-size:12.5px;color:var(--muted);text-decoration:underline;cursor:pointer}
-  .wnm{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:10px 14px 0;padding:10px 14px;border:1.5px dashed var(--line);
-    border-radius:12px;font-size:14px;color:var(--ink)}
+  .wnm{margin:14px 14px 4px;border-radius:14px;border:2px solid #f0b429;background:#fff8e6;padding:14px 16px;color:var(--ink)}
   .wnm:empty{display:none}
-  .wnm .tl{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  .wnm .ok{color:#1c7c54;font-weight:700}.wnm .short{color:#b42318;font-weight:800}.wnm .over{color:#8a5a00;font-weight:800}
-  .wnm .wnm-add{display:inline-flex;align-items:center;gap:6px}
+  .wnm.good{border-color:#9fd8b8;background:#effaf3}
+  .wnm.bad{border-color:#f3b4ae;background:#fff1ef}
+  .wnm-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+  .wnm-h b{font-size:17px;font-weight:800;color:var(--ink-dk)}
+  .wnm-pill{font-size:12.5px;font-weight:800;border-radius:20px;padding:3px 11px;background:#f0b429;color:#3d2a00}
+  .wnm.good .wnm-pill{background:#1c7c54;color:#fff}.wnm.bad .wnm-pill{background:#b42318;color:#fff}
+  .wnm-sub{font-size:12.5px;color:var(--muted)}
+  .wnm-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+  .wnm-row{display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  .wnm-row .n{font-size:14px}.wnm-row .n b{font-size:18px;color:var(--ink-dk)}
+  .wnm .ok{color:#1c7c54;font-weight:800}.wnm .short{color:#b42318;font-weight:800}.wnm .over{color:#8a5a00;font-weight:800}
+  .wnm .full{font-size:12.5px;color:var(--muted)}
+  .wnm .wnm-add{display:flex;align-items:center;gap:6px}
   .wnm .wnm-add select{border:1.5px solid var(--line);border-radius:8px;padding:3px 6px;font:inherit;font-size:13px}
+  .wn .wn-go.big{width:100%;justify-content:center;font-size:15px;padding:10px 12px}
+  .wn-rm{background:none;border:0;padding:0;font:inherit;font-size:12.5px;color:#b42318;text-decoration:underline;cursor:pointer}
   @media screen and (max-width:980px){ .gp-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
   @media screen and (max-width:640px){ .gp-grid{grid-template-columns:minmax(0,1fr);padding:10px 0 14px} }
   .gp-card,.gp-in{min-width:0}
@@ -7623,12 +7634,13 @@ function wnInner(r){
   const s = WN && (WN.items || {})[r.id];
   if (!s) return '';
   const id = esc(r.id), by = s.by ? ' <span class="wn-by">&middot; ' + esc(String(s.by).split(' ')[0]) + '</span>' : '';
+  const rm = s.removable && WN.can ? '<button class="wn-rm" type="button" data-wnrm="' + id + '">Remove (added by mistake)</button>' : '';
   if (s.state === 'ready') return WN.can
-    ? '<button class="btn sm wn-go" type="button" data-wn="' + id + '">&#9889; Write it now</button>'
-      + '<span class="wn-sub">Jumps the queue for the ' + esc(WNKIND[s.kind] || 'writer') + ', next run ' + esc(s.next || '') + (s.test ? ' (test hub: nothing is written)' : '') + '</span>'
+    ? '<button class="btn wn-go big" type="button" data-wn="' + id + '">&#9889; Write it now</button>'
+      + '<span class="wn-sub">The topic is here but not written yet. This puts it first for the ' + esc(WNKIND[s.kind] || 'writer') + ', next run ' + esc(s.next || '') + (s.test ? ' (test hub: nothing is written)' : '') + '.</span>' + rm
     : '<span class="wn-st no">Not written yet</span>';
   if (s.state === 'queued') return '<span class="wn-st q">&#9203; ' + esc(s.label) + by + '</span>'
-    + (WN.can ? '<button class="wn-x" type="button" data-wncancel="' + id + '">Cancel</button>' : '');
+    + (WN.can ? '<button class="wn-x" type="button" data-wncancel="' + id + '">Cancel</button>' : '') + rm;
   if (s.state === 'writing') return '<span class="wn-st w">&#9997;&#65039; Writing now' + by + '</span>';
   if (s.state === 'written') return '<span class="wn-st ok">&#10003; Written, ready for QC' + by + '</span>';
   if (s.state === 'failed') return '<span class="wn-st bad">' + esc(s.label) + '</span>'
@@ -7638,47 +7650,74 @@ function wnInner(r){
 function wnMonthLine(mk){
   if (!wnOn()) return '';
   wnLoad();
-  return '<div class="wnm" data-wnmonth="' + esc(mk) + '">' + wnMonthInner(mk) + '</div>';
+  return '<div data-wnmonth="' + esc(mk) + '">' + wnMonthInner(mk) + '</div>';
 }
 function wnMonthInner(mk){
   if (!WNCHK || !Array.isArray(WNCHK.months)) return '';
   const m = WNCHK.months.find(x => x.month === mk); if (!m) return '';
   const rng = (lo, hi) => (lo === hi ? String(lo) : lo + ' to ' + hi);
-  const part = (have, lo, hi, label) => {
-    lo = Number(lo) || 0; hi = Number(hi) || 0; if (!lo && !hi) return '';
-    const st = have < lo ? '<span class="short">short by ' + (lo - have) + '</span>'
-             : have > hi ? '<span class="over">over by ' + (have - hi) + '</span>' : '<span class="ok">&#10003;</span>';
-    return '<span>' + label + ' <b>' + have + '</b> of ' + rng(lo, hi) + ' ' + st + '</span>';
-  };
-  const parts = [
-    part(m.total, m.total_min, m.total_max, 'Pages and blogs'),
-    '<span style="color:var(--muted)">(pages ' + m.pages + ' of ' + rng(m.pages_min, m.pages_max) + ', blogs ' + m.blogs + ' of ' + rng(m.blogs_min, m.blogs_max) + ')</span>',
-    Number(m.power_max) ? part(m.power, m.power_min, m.power_max, 'Power Mode') : '',
-    part(m.gbp, m.gbp_min, m.gbp_max, 'GBP'),
-    part(m.linkedin, m.linkedin_min, m.linkedin_max, 'LinkedIn')
-  ].filter(Boolean);
-  const add = (kind, room, short) => {
-    if (!WNCHK.can || !room) return '';
+  const N = v => Number(v) || 0;
+  const stateOf = (have, lo, hi) => have < lo ? 'short' : have > hi ? 'over' : 'ok';
+  const word = (have, lo, hi) => have < lo ? '<span class="short">short by ' + (lo - have) + '</span>'
+    : have > hi ? '<span class="over">over by ' + (have - hi) + '</span>' : '<span class="ok">&#10003; on target</span>';
+  const addCtl = (kind, room, short, label) => {
+    if (!WNCHK.can) return '';
+    if (!room) return '<span class="full">Full: no room for more this month</span>';
     const def = Math.max(1, Math.min(room, short || 1)), key = esc(mk) + '|' + kind;
     let opts = ''; for (let i = 1; i <= room; i++) opts += '<option' + (i === def ? ' selected' : '') + '>' + i + '</option>';
-    return '<span class="wnm-add"><select data-wnaddn="' + key + '">' + opts + '</select>'
-      + '<button class="btn sm" type="button" data-wnaddgo="' + key + '">Add ' + (kind === 'page' ? 'pages' : 'blogs') + '</button></span>';
+    return '<span class="wnm-add"><select data-wnaddn="' + key + '" title="Room for ' + room + ' more">' + opts + '</select>'
+      + '<button class="btn sm" type="button" data-wnaddgo="' + key + '">' + label + '</button>'
+      + '<span class="full">room for ' + room + '</span></span>';
   };
-  const shortP = Math.max(0, m.pages_min - m.pages), shortB = Math.max(0, m.blogs_min - m.blogs, m.total_min - m.total - shortP);
-  return '<span class="tl">Deliverables</span>' + parts.join(' &middot; ')
-    + add('page', Number(m.add_pages) || 0, shortP) + add('blog', Number(m.add_blogs) || 0, shortB);
+  const shortP = Math.max(0, N(m.pages_min) - N(m.pages));
+  const shortB = Math.max(0, N(m.blogs_min) - N(m.blogs), N(m.total_min) - N(m.total) - shortP);
+  const rows = [];
+  const row = (title, have, lo, hi, extra, ctl) => {
+    if (!N(lo) && !N(hi)) return;
+    rows.push('<div class="wnm-row"><span class="n">' + title + ' <b>' + have + '</b> of ' + rng(N(lo), N(hi)) + ' &middot; ' + word(have, N(lo), N(hi)) + '</span>'
+      + (extra ? '<span class="wnm-sub">' + extra + '</span>' : '') + (ctl || '') + '</div>');
+  };
+  row('Pages', N(m.pages), m.pages_min, m.pages_max, '', addCtl('page', N(m.add_pages), shortP, 'Add pages'));
+  row('Blogs', N(m.blogs), m.blogs_min, m.blogs_max, '', addCtl('blog', N(m.add_blogs), shortB, 'Add blogs'));
+  if (N(m.power_max)) row('Power Mode', N(m.power), m.power_min, m.power_max, '', '');
+  row('GBP posts', N(m.gbp), m.gbp_min, m.gbp_max, 'Added by the GBP writer, not here', '');
+  row('LinkedIn', N(m.linkedin), m.linkedin_min, m.linkedin_max, 'One per blog, written from that blog',
+      addCtl('linkedin', N(m.add_linkedin), Math.max(0, N(m.linkedin_min) - N(m.linkedin)), 'Add LinkedIn'));
+  const states = [stateOf(N(m.total), N(m.total_min), N(m.total_max)), stateOf(N(m.gbp), N(m.gbp_min), N(m.gbp_max)),
+                  N(m.linkedin_max) ? stateOf(N(m.linkedin), N(m.linkedin_min), N(m.linkedin_max)) : 'ok'];
+  const short = states.includes('short'), over = states.includes('over');
+  const cls = short ? '' : over ? ' bad' : ' good';
+  const pill = short ? 'Short' : over ? 'Over the maximum' : 'On target';
+  return '<div class="wnm' + cls + '"><div class="wnm-h"><b>' + esc(monthLabel(mk)) + ' deliverables</b><span class="wnm-pill">' + pill + '</span>'
+    + '<span class="wnm-sub">Pages and blogs ' + N(m.total) + ' of ' + rng(N(m.total_min), N(m.total_max)) + ' &middot; from the client’s package (team only)</span></div>'
+    + '<div class="wnm-rows">' + rows.join('') + '</div></div>';
 }
 function wnRefreshMonth(mk){
   const t = TABLIST.find(x => x.monthKey === mk);
   if (t && typeof refreshMonth === 'function') refreshMonth(t);
 }
 if (typeof CFG !== 'undefined' && CFG.writeNow) document.addEventListener('click', async e => {
-  const go = e.target.closest('[data-wn],[data-wncancel],[data-wnkw],[data-wnaddgo]'); if (!go || !wnOn()) return;
+  const go = e.target.closest('[data-wn],[data-wncancel],[data-wnkw],[data-wnaddgo],[data-wnrm]'); if (!go || !wnOn()) return;
+  if (go.dataset.wnrm) {
+    const it = ITEMS.find(x => x.id === go.dataset.wnrm); if (!it) return;
+    if (!confirm('Remove "' + it.title + '" from ' + monthLabel(it.month_key) + '? Nothing has been written for it, so nothing is lost.')) return;
+    go.disabled = true; badge('Removing…');
+    const { error } = await sb.rpc('ch_month_unfill', { p_item: it.id });
+    go.disabled = false;
+    if (error) { badge(error.message, 'err'); return; }
+    ITEMS = ITEMS.filter(x => x.id !== it.id);
+    await wnLoad(true); wnRefreshMonth(it.month_key); badge('Removed', 'ok');
+    return;
+  }
   if (go.dataset.wnaddgo) {
     const [mk, kind] = go.dataset.wnaddgo.split('|');
     const sel = document.querySelector('[data-wnaddn="' + go.dataset.wnaddgo + '"]'), n = Number(sel && sel.value) || 1;
-    const noun = kind === 'page' ? (n === 1 ? 'page' : 'pages') : (n === 1 ? 'blog' : 'blogs');
-    if (!confirm('Add ' + n + ' ' + noun + ' to ' + monthLabel(mk) + ' from the best unused keywords, and queue them to write now?')) return;
+    const noun = kind === 'page' ? (n === 1 ? 'page' : 'pages') : kind === 'linkedin' ? (n === 1 ? 'LinkedIn article' : 'LinkedIn articles') : (n === 1 ? 'blog' : 'blogs');
+    const mm = (WNCHK && WNCHK.months || []).find(x => x.month === mk) || {};
+    const after = kind === 'linkedin' ? 'LinkedIn ' + ((Number(mm.linkedin) || 0) + n) + ' of ' + mm.linkedin_min + ' to ' + mm.linkedin_max
+      : 'pages and blogs ' + ((Number(mm.total) || 0) + n) + ' of ' + mm.total_min + ' to ' + mm.total_max;
+    if (!confirm('Add ' + n + ' ' + noun + ' to ' + monthLabel(mk) + (kind === 'linkedin' ? ', one from each blog that has none yet,' : ' from the best unused keywords,')
+      + ' and queue them to write now?\n\nAfter this: ' + after + '.')) return;
     go.disabled = true; badge('Adding ' + noun + '…');
     const { data, error } = await sb.rpc('ch_month_fill', { p_slug: CFG.slug, p_month: mk, p_kind: kind, p_count: n });
     go.disabled = false;
@@ -7689,7 +7728,7 @@ if (typeof CFG !== 'undefined' && CFG.writeNow) document.addEventListener('click
     (rows || []).forEach(r => { if (!ITEMS.some(x => x.id === r.id)) ITEMS.push(r); });
     ITEMS.sort((a, b) => String(a.publish_date).localeCompare(String(b.publish_date)) || (a.sort_order || 0) - (b.sort_order || 0));
     await wnLoad(true); wnRefreshMonth(mk);
-    badge('Added ' + ids.length + ' ' + (kind === 'page' ? (ids.length === 1 ? 'page' : 'pages') : (ids.length === 1 ? 'blog' : 'blogs')) + ', queued to write', 'ok');
+    badge('Added ' + ids.length + ' ' + (kind === 'page' ? 'page' : kind === 'linkedin' ? 'LinkedIn article' : 'blog') + (ids.length === 1 ? '' : 's') + ', queued to write', 'ok');
     return;
   }
   const id = go.dataset.wn || go.dataset.wncancel || go.dataset.wnkw;
@@ -7800,7 +7839,6 @@ function picCard(r, staff){
     team = '<div class="gp-team pc-team"><div class="pc-tlrow"><span class="tl">Team only</span>'
         + (blogState ? '<span class="bstage '+blogState.cls+'">'+esc(blogState.label)+'</span>' : '') + '</div>'
       + pcAssigned(r)
-      + wnBox(r)
       + '<div class="pc-row"><span class="schedset" title="'+(r.approved ? (li ? 'The date this goes live on LinkedIn' : 'The date this goes live on the website') : 'Approve the content before scheduling it')+'">Go-live date '
           + '<input type="date" data-sched="'+id+'" value="'+esc(r.scheduled_for||'')+'"'+(r.approved || r.scheduled_for ? '' : ' disabled')+'></span>'
         + syncTag + '</div>'
@@ -7845,6 +7883,7 @@ function picCard(r, staff){
         + (r.scheduled_for ? ' &middot; ' + (isLive ? 'Went live ' : 'Goes live ') + esc(ausDate(r.scheduled_for)) : '') + '</div>'
       + '<h3>' + esc(r.title) + '</h3>'
       + (kw.length ? '<div class="pc-kw">' + kw.join('') + '</div>' : '')
+      + (staff ? wnBox(r) : '')
       + (read || live ? '<div class="pc-readrow">' + read + live + '</div>' : '')
       + fb + note + cmt
       + cAssign
