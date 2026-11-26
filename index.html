@@ -6324,7 +6324,12 @@ function spWire(el){
           msg = monthName(mk) + ' generated: ' + [c.post && c.post + ' statics', c.carousel && c.carousel + ' carousels', c.reel && c.reel + ' reels', c.story && c.story + ' stories', c.linkedin && c.linkedin + ' LinkedIn articles'].filter(Boolean).join(', '); }
       } catch (err) { msg = 'Could not reach the generator. Check the month before trying again.'; }
       SP_GEN = null; SP_GEN_ERR = ok ? '' : msg;
-      if (ok) SP_MONTH = mk;
+      if (ok) {
+        SP_MONTH = mk;
+        // The month's new LinkedIn articles are Content plan rows: load them so they show here without a refresh.
+        const { data: li } = await sb.from('ch_items').select('*').eq('client_id', CLIENT_ID).eq('month_key', mk).eq('deliverable', 'linkedin_article');
+        (li || []).forEach(x => { if (!ITEMS.some(y => y.id === x.id)) ITEMS.push(x); });
+      }
       badge(msg, ok ? 'ok' : 'err');
       await spLoad(el);
       if (ok) {
