@@ -641,6 +641,11 @@
   .sp-cardots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 0 2px rgba(0,0,0,.4)}
   .sp-cardots i.on{background:#fff}
   .sp-make{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px 0;font-size:12.5px;color:var(--muted)}
+  .sp-plan{margin:8px 14px 0;border:1.5px solid #c9e3d4;border-radius:12px;background:#f4fbf7}
+  .sp-plan .sp-gtog small{font-weight:600;color:var(--muted);font-size:12px;margin-left:6px}
+  .sp-psum{margin:0;font-size:14px;line-height:1.5;color:var(--ink)}
+  .sp-pcols{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px 16px}
+  .sp-pcols b{font-size:12.5px;color:var(--muted)}.sp-pcols ul{margin:4px 0 0;padding-left:18px;font-size:13.5px;line-height:1.45}
   .sp-look{font-weight:800;color:var(--ink-dk);background:var(--soft);border-radius:20px;padding:3px 10px}
   .sp-guide{margin:8px 14px 0;border:1.5px solid var(--line);border-radius:12px;background:#fff}
   .sp-gtog{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:0;padding:11px 14px;font:inherit;font-size:14.5px;font-weight:800;color:var(--ink-dk);cursor:pointer}
@@ -6162,6 +6167,7 @@ function spBriefBox(r){
     if (spIsStatic(r)) { if (b.headline) rows.push(['Headline', b.headline]); if (b.subhead) rows.push(['Subhead', b.subhead]); }
     else { if (b.title) rows.push(['Title', b.title]); (b.slides || []).forEach((s, i) => { if (String(s).trim()) rows.push(['Slide ' + (i + 1), s]); }); }
     if (b.brief) rows.push(['Notes', b.brief]);
+    if (b.why) rows.push(['Why', b.why]);
     body = '<dl class="sp-bl">' + rows.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join('') + '</dl>';
   }
   // Statics and carousels are made by us, so with no brief they need none (Jhen 26/11/2026); reels and stories are Archie's.
@@ -6331,6 +6337,26 @@ async function spMakeMonth(el, mk){
   badge(done + ' graphic' + (done === 1 ? '' : 's') + ' made' + (failed ? ', ' + failed + ' could not be made (use Make graphic on the card)' : ''), failed ? 'err' : 'ok');
   spPaint(el);
 }
+let SP_PLAN_OPEN = {};
+function spPlanPanel(mk){
+  if (ME.kind !== 'internal') return '';
+  const pl = (SP_MONTHS[mk] || {}).plan; if (!pl) return '';
+  const open = SP_PLAN_OPEN[mk] !== false;
+  const li = a => (a || []).length ? '<ul>' + a.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
+  const based = pl.based_on_posts ? 'Built from ' + pl.based_on_posts + ' real posts and their results' : 'No past results yet, planned from the strategy';
+  return '<div class="sp-plan"><button type="button" class="sp-gtog" data-spplan="' + esc(mk) + '">&#129517; ' + esc(monthName(mk)) + ' plan <small>' + esc(based) + ', team only</small> <span>' + (open ? '&#9650;' : '&#9660;') + '</span></button>'
+    + (open ? '<div class="sp-gbody">'
+      + (pl.summary ? '<p class="sp-psum">' + esc(pl.summary) + '</p>' : '')
+      + (pl.goal ? '<div class="sp-grow"><b>Goal</b>' + esc(pl.goal) + '</div>' : '')
+      + '<div class="sp-pcols">'
+      + ((pl.worked || []).length ? '<div><b>What worked</b>' + li(pl.worked) + '</div>' : '')
+      + ((pl.didnt || []).length ? '<div><b>What didn&rsquo;t</b>' + li(pl.didnt) + '</div>' : '')
+      + ((pl.more_of || []).length ? '<div><b>More of</b>' + li(pl.more_of) + '</div>' : '')
+      + ((pl.less_of || []).length ? '<div><b>Less of</b>' + li(pl.less_of) + '</div>' : '')
+      + ((pl.key_dates || []).length ? '<div><b>Key dates</b>' + li(pl.key_dates) + '</div>' : '')
+      + ((pl.weekly_themes || []).length ? '<div><b>Weekly themes</b>' + li(pl.weekly_themes) + '</div>' : '')
+      + '</div></div>' : '') + '</div>';
+}
 function spMakeBar(mk){
   if (!CFG.socialGenerate || ME.kind !== 'internal' || SP_GEN || SP_GEN_PROG) return '';
   const n = SP_ROWS.filter(x => x.month_key === mk && ['post', 'carousel'].includes(x.kind) && !x.media_url).length;
@@ -6427,7 +6453,7 @@ function spPaint(el){
   const appr = mr.filter(r => r.status === 'approved').length, chg = mr.filter(r => r.status === 'changes').length;
   let h = spGenBar() + spGuidePanel() + spMonthStrip(keys)
         + '<h3 class="sp-month">' + esc(monthName(SP_MONTH)) + '<span>' + (mr.length + li.length) + ' items</span></h3>'
-        + spReleaseBar(SP_MONTH) + spMakeBar(SP_MONTH);
+        + spReleaseBar(SP_MONTH) + spPlanPanel(SP_MONTH) + spMakeBar(SP_MONTH);
   if (ME.kind !== 'internal' || spReleased(SP_MONTH)) {
     h += '<div class="sp-sum"><span><b>' + (mr.length - appr - chg) + '</b> waiting</span><span><b>' + appr + '</b> approved</span>'
        + (chg ? '<span><b>' + chg + '</b> with changes requested</span>' : '') + '</div>';
@@ -6483,6 +6509,8 @@ function spWire(el){
   el.addEventListener('click', async e => {
     const mc = e.target.closest('[data-spmonth]');
     if (mc) { SP_MONTH = mc.dataset.spmonth; spPaint(el); return; }
+    const pq = e.target.closest('[data-spplan]');
+    if (pq) { const k = pq.dataset.spplan; SP_PLAN_OPEN[k] = SP_PLAN_OPEN[k] === false; spPaint(el); return; }
     const mb = e.target.closest('[data-spmakeall]');
     if (mb) { await spMakeMonth(el, mb.dataset.spmakeall); return; }
     const gq = e.target.closest('[data-spguide]');
