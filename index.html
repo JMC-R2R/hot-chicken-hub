@@ -631,8 +631,15 @@
   .sp-gen .sp-gt b{display:block;font-size:14.5px;color:var(--ink-dk)}
   .sp-gen select{border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:14px}
   .sp-gen.run{background:#fff6dd;border-color:#f0d58a}
-  .sp-slides{display:flex;gap:6px;padding:8px 10px 0;overflow-x:auto}
-  .sp-slides img{width:54px;height:68px;object-fit:cover;border-radius:6px;display:block;border:1px solid var(--line)}
+  .sp-car{position:absolute;inset:0;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .sp-car::-webkit-scrollbar{display:none}
+  .sp-media .sp-car img{position:static;flex:0 0 100%;width:100%;height:100%;object-fit:cover;scroll-snap-align:start}
+  .sp-carb{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:34px;height:34px;border-radius:50%;border:0;
+    background:rgba(255,255,255,.92);color:#1f2a37;font-size:24px;line-height:30px;cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,.25)}
+  .sp-carb.prev{left:10px}.sp-carb.next{right:10px}.sp-carb[hidden]{display:none}
+  .sp-cardots{position:absolute;bottom:10px;left:0;right:0;z-index:2;display:flex;justify-content:center;gap:5px}
+  .sp-cardots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 0 2px rgba(0,0,0,.4)}
+  .sp-cardots i.on{background:#fff}
   .sp-make{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px 0;font-size:12.5px;color:var(--muted)}
   .sp-look{font-weight:800;color:var(--ink-dk);background:var(--soft);border-radius:20px;padding:3px 10px}
   .sp-guide{margin:8px 14px 0;border:1.5px solid var(--line);border-radius:12px;background:#fff}
@@ -6283,11 +6290,20 @@ async function spGuideAct(el, a, b){
     SP_GUIDE = data; SP_GUIDE_EDIT = null; badge('Design guide saved', 'ok'); spPaint(el);
   }
 }
-function spSlidesStrip(r){
-  const u = Array.isArray(r.media_urls) ? r.media_urls : [];
-  if (r.kind !== 'carousel' || u.length < 2) return '';
-  return '<div class="sp-slides">' + u.map((x, i) => '<a href="' + esc(x) + '" target="_blank" rel="noopener" title="Slide ' + (i + 1) + '"><img src="' + esc(x) + '" alt="Slide ' + (i + 1) + '" loading="lazy"></a>').join('') + '</div>';
+// Carousel swipe: arrows scroll one slide; dots and arrows follow the scroll position, so a finger swipe updates them too.
+function spCarSync(car){
+  const box = car.closest('.sp-media'); if (!box) return;
+  const n = car.children.length, i = Math.round(car.scrollLeft / Math.max(1, car.clientWidth));
+  box.querySelectorAll('.sp-cardots i').forEach((d, k) => d.classList.toggle('on', k === i));
+  const pv = box.querySelector('.sp-carb.prev'), nx = box.querySelector('.sp-carb.next');
+  if (pv) pv.hidden = i <= 0; if (nx) nx.hidden = i >= n - 1;
 }
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-spcarb]'); if (!b) return;
+  const car = b.closest('.sp-media').querySelector('[data-spcar]'); if (!car) return;
+  e.preventDefault(); car.scrollBy({ left: Number(b.dataset.spcarb) * car.clientWidth, behavior: 'smooth' });
+});
+document.addEventListener('scroll', e => { const c = e.target; if (c && c.matches && c.matches('[data-spcar]')) spCarSync(c); }, true);
 function spMakeRow(r, staff, rel){
   if (!staff || !CFG.socialGenerate || !['post', 'carousel'].includes(r.kind) || r.status === 'approved') return '';
   const busy = SP_RENDER[r.id], ds = (SP_BRIEFS[r.id] || {}).design;
@@ -6343,7 +6359,13 @@ function spCard(r){
   const done = r.status === 'approved', chg = r.status === 'changes', staff = ME.kind === 'internal';
   const rel = spReleased(r.month_key), b = SP_BRIEFS[r.id];
   const maker = (b && b.made_by) || (r.kind === 'reel' || r.kind === 'story' ? 'Archie' : 'the team');
-  const media = r.media_url
+  const slides = r.kind === 'carousel' && Array.isArray(r.media_urls) ? r.media_urls.filter(Boolean) : [];
+  const media = slides.length > 1
+    ? '<div class="sp-car" data-spcar>' + slides.map((x, i) => '<img src="' + esc(x) + '" alt="Slide ' + (i + 1) + ' of ' + slides.length + '" loading="lazy">').join('') + '</div>'
+      + '<button type="button" class="sp-carb prev" data-spcarb="-1" aria-label="Previous slide" hidden>&#8249;</button>'
+      + '<button type="button" class="sp-carb next" data-spcarb="1" aria-label="Next slide">&#8250;</button>'
+      + '<span class="sp-cardots">' + slides.map((_, i) => '<i' + (i ? '' : ' class="on"') + '></i>').join('') + '</span>'
+    : r.media_url
     ? (r.media_type === 'video' ? '<video src="' + esc(r.media_url) + '#t=1" controls playsinline preload="metadata"></video>'
                                 : '<img src="' + esc(r.media_url) + '" alt="" loading="lazy">')
     : '<div class="sp-ph"><span class="pc-phk">' + K + '</span><span class="pc-phs">Being made by ' + esc(maker) + '</span></div>';
@@ -6357,7 +6379,7 @@ function spCard(r){
   const missing = [!r.media_url ? (r.kind === 'reel' || r.kind === 'story' ? 'video' : 'graphic') : null, !r.caption ? 'caption' : null].filter(Boolean);
   return '<div class="gp-card ' + (done ? 'st-ok' : chg ? 'st-chg' : prep && missing.length ? 'st-soon' : '') + '" data-spid="' + id + '">'
     + '<div class="sp-media' + (r.kind === 'story' || r.kind === 'reel' ? ' story' : '') + '"><span class="sp-kind">' + K + '</span>' + media + '</div>'
-    + spSlidesStrip(r) + spMakeRow(r, staff, rel)
+    + spMakeRow(r, staff, rel)
     + '<div class="gp-in">'
       + '<div class="gp-type">' + esc(spDay(r.publish_date)) + ((r.platforms || []).length ? ' &middot; ' + esc(r.platforms.map(x => x[0].toUpperCase() + x.slice(1)).join(' + ')) : '') + '</div>'
       + ((r.service || r.pillar) ? '<div class="sp-tags">' + (r.service ? '<span class="sp-tag">' + esc(r.service) + '</span>' : '') + (r.pillar ? '<span class="sp-tag">' + esc(r.pillar) + '</span>' : '') + '</div>' : '')
