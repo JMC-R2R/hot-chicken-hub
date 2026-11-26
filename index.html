@@ -631,6 +631,7 @@
   .sp-gen .sp-gt b{display:block;font-size:14.5px;color:var(--ink-dk)}
   .sp-gen select{border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:14px}
   .sp-gen.run{background:#fff6dd;border-color:#f0d58a}
+  .sp-gen .sp-gerr{flex-basis:100%;font-size:13px;font-weight:700;color:#b42318}
   .sp-box{display:flex;flex-direction:column;gap:6px}
   .sp-box label{font-size:13px;font-weight:800;color:var(--ink-dk)}
   .sp-box textarea{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;resize:vertical;min-height:72px}
@@ -6127,15 +6128,17 @@ function spBriefBox(r){
     if (b.brief) rows.push(['Notes', b.brief]);
     body = '<dl class="sp-bl">' + rows.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join('') + '</dl>';
   }
+  // Statics and carousels are made by us, so with no brief they need none (Jhen 26/11/2026); reels and stories are Archie's.
+  const forArchie = r.kind === 'reel' || r.kind === 'story' || who === 'Archie';
   return '<div class="sp-brief"><span class="tl">' + LOCK_SVG + ' Designer brief &middot; for ' + esc(who) + '</span>'
     + '<div class="sp-bhead">' + headBits + '</div>'
-    + (has ? body : '<div class="gp-sub">No brief yet.</div>')
-    + '<button type="button" class="btn ghost" data-sp="editbrief">' + (has ? 'Edit brief' : 'Add brief') + '</button></div>';
+    + (has ? body : '<div class="gp-sub">' + (forArchie ? 'No brief yet.' : 'No brief needed.') + '</div>')
+    + '<button type="button" class="btn ghost" data-sp="editbrief">' + (has ? 'Edit brief' : forArchie ? 'Add brief' : 'Add notes') + '</button></div>';
 }
 /* Generate a month (hub.json "social_generate", Jhen 26/11/2026): social-only clients. Writes every card on
    the client's posting days with its caption and designer brief, instantly (Edge Function social-generate).
    The month stays team only until it is released; Archie is told in Slack when his reel and story briefs are in. */
-let SP_GEN = null;
+let SP_GEN = null, SP_GEN_ERR = '';
 function spGenBar(){
   if (!CFG.socialGenerate || ME.kind !== 'internal') return '';
   if (SP_GEN) return '<div class="sp-gen run"><span class="sp-gt"><b>&#9997;&#65039; Writing ' + esc(monthName(SP_GEN)) + '…</b>'
@@ -6146,8 +6149,10 @@ function spGenBar(){
     if (!have.has(mk)) opts.push('<option value="' + mk + '">' + esc(monthName(mk)) + '</option>');
   }
   if (!opts.length) return '';
+  // A failed run stays on the bar until the next try, so it is never missed (Jhen 26/11/2026).
+  const err = SP_GEN_ERR ? '<span class="sp-gerr">&#9888;&#65039; ' + esc(SP_GEN_ERR) + '</span>' : '';
   return '<div class="sp-gen"><span class="sp-gt"><b>Generate a month</b>Writes every static, carousel, reel and story on the posting days, with captions and designer briefs. The client sees nothing until you release it.</span>'
-    + '<select data-spgenm>' + opts.join('') + '</select><button type="button" class="btn" data-spgen>Generate</button></div>';
+    + '<select data-spgenm>' + opts.join('') + '</select><button type="button" class="btn" data-spgen>Generate</button>' + err + '</div>';
 }
 function spCard(r){
   const id = esc(r.id), K = SP_KIND[r.kind] || 'Static', k = K.toLowerCase();
@@ -6273,7 +6278,7 @@ function spWire(el){
     if (gb) {
       const sel = el.querySelector('[data-spgenm]'), mk = sel && sel.value; if (!mk || SP_GEN) return;
       if (!confirm('Generate ' + monthName(mk) + ' now?\n\nIt writes every static, carousel, reel and story on the posting days, with captions and designer briefs, in about a minute. The client sees nothing until you release the month, and Archie is told in Slack when his reel and story briefs are in.')) return;
-      SP_GEN = mk; spPaint(el);
+      SP_GEN = mk; SP_GEN_ERR = ''; spPaint(el);
       let msg = '', ok = false;
       try {
         const { data: { session } } = await sb.auth.getSession();
@@ -6285,7 +6290,7 @@ function spWire(el){
         else { ok = true; const c = j.counts || {};
           msg = monthName(mk) + ' generated: ' + [c.post && c.post + ' statics', c.carousel && c.carousel + ' carousels', c.reel && c.reel + ' reels', c.story && c.story + ' stories'].filter(Boolean).join(', '); }
       } catch (err) { msg = 'Could not reach the generator. Check the month before trying again.'; }
-      SP_GEN = null;
+      SP_GEN = null; SP_GEN_ERR = ok ? '' : msg;
       if (ok) SP_MONTH = mk;
       badge(msg, ok ? 'ok' : 'err');
       await spLoad(el);
