@@ -634,6 +634,26 @@
   .sp-slides{display:flex;gap:6px;padding:8px 10px 0;overflow-x:auto}
   .sp-slides img{width:54px;height:68px;object-fit:cover;border-radius:6px;display:block;border:1px solid var(--line)}
   .sp-make{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px 0;font-size:12.5px;color:var(--muted)}
+  .sp-look{font-weight:800;color:var(--ink-dk);background:var(--soft);border-radius:20px;padding:3px 10px}
+  .sp-guide{margin:8px 14px 0;border:1.5px solid var(--line);border-radius:12px;background:#fff}
+  .sp-gtog{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:0;padding:11px 14px;font:inherit;font-size:14.5px;font-weight:800;color:var(--ink-dk);cursor:pointer}
+  .sp-gtog span{font-size:11px;color:var(--muted)}
+  .sp-gbody{padding:0 14px 14px;display:flex;flex-direction:column;gap:9px;font-size:13.5px}
+  .sp-grow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sp-grow b{min-width:92px;color:var(--muted);font-size:12.5px}
+  .sp-sw{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);display:inline-block}
+  .sp-refs{display:flex;gap:6px;flex-wrap:wrap}.sp-ref img{width:64px;height:80px;object-fit:cover;border-radius:6px;display:block;border:2px solid var(--line)}
+  .sp-ref.liked img{border-color:#1c7c54}.sp-ref.rejected img{border-color:#b42318;opacity:.7}
+  .sp-gedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:800;color:var(--ink-dk)}
+  .sp-gedit input:not([type=checkbox]):not([type=color]),.sp-gedit select,.sp-gedit textarea{border:1.5px solid var(--line);border-radius:9px;padding:6px 9px;font:inherit;font-size:13.5px;font-weight:400}
+  .sp-gedit textarea{min-height:56px;resize:vertical}
+  .sp-gcols{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+  .sp-ci{display:flex;gap:6px;align-items:center}.sp-ci input[type=color]{width:38px;height:32px;border:0;padding:0;background:none}
+  .sp-glooks,.sp-grefs{display:flex;flex-direction:column;gap:6px}
+  .sp-chk{flex-direction:row!important;align-items:center;gap:8px!important;font-weight:600!important}
+  .sp-chk input[type=number]{width:64px}
+  .sp-gref{display:grid;grid-template-columns:2fr 2fr auto auto;gap:6px;align-items:center}
+  .sp-gref .x{background:none;border:0;color:#b42318;font-size:18px;cursor:pointer}
+  @media (max-width:640px){.sp-gref{grid-template-columns:1fr}}
   .sp-gen .sp-gerr{flex-basis:100%;font-size:13px;font-weight:700;color:#b42318}
   .sp-box{display:flex;flex-direction:column;gap:6px}
   .sp-box label{font-size:13px;font-weight:800;color:var(--ink-dk)}
@@ -6027,6 +6047,10 @@ async function spLoad(el){
     sb.from('ch_social_months').select('*').eq('client_id', CLIENT_ID),
     staff ? sb.from('ch_social_briefs').select('*').eq('client_id', CLIENT_ID) : Promise.resolve({ data: [] })
   ]);
+  if (staff && CFG.socialGenerate) {
+    const gd = await sb.from('ch_social_design_guides').select('*').eq('client_id', CLIENT_ID).maybeSingle();
+    SP_GUIDE = gd.data || null;
+  }
   const body = el.querySelector('#spBody');
   if (posts.error) { body.innerHTML = '<p class="empty">Could not load the social posts: ' + esc(posts.error.message) + '</p>'; return; }
   SP_ROWS = posts.data || [];
@@ -6163,7 +6187,102 @@ function spGenBar(){
 }
 /* Graphics for our own cards (Jhen 26/11/2026): social-render makes a static or carousel from the client's own
    photos and the brief's words. Every slide of a carousel shows as a strip under the card. */
-let SP_RENDER = {};
+let SP_RENDER = {}, SP_GUIDE = null, SP_GUIDE_OPEN = false, SP_GUIDE_EDIT = null;
+/* Design guide (Jhen 26/11/2026): per client, team only. Brand colours and fonts, the looks the designer may use
+   (with monthly caps), logo and photo rules, what works, what never to do, and reference designs (liked or rejected)
+   that the art director looks at before designing a month. */
+const SP_GF = 'https://github.com/google/fonts/raw/main/ofl/';
+const SP_FONTS = { 'Archivo Black': SP_GF + 'archivoblack/ArchivoBlack-Regular.ttf', 'Anton': SP_GF + 'anton/Anton-Regular.ttf',
+  'Bebas Neue': SP_GF + 'bebasneue/BebasNeue-Regular.ttf', 'DM Serif Display': SP_GF + 'dmserifdisplay/DMSerifDisplay-Regular.ttf',
+  'Abril Fatface': SP_GF + 'abrilfatface/AbrilFatface-Regular.ttf', 'Alfa Slab One': SP_GF + 'alfaslabone/AlfaSlabOne-Regular.ttf',
+  'Yeseva One': SP_GF + 'yesevaone/YesevaOne-Regular.ttf', 'Poppins ExtraBold': SP_GF + 'poppins/Poppins-ExtraBold.ttf',
+  'Poppins Bold': SP_GF + 'poppins/Poppins-Bold.ttf', 'Poppins Regular': SP_GF + 'poppins/Poppins-Regular.ttf',
+  'Lato Black': SP_GF + 'lato/Lato-Black.ttf', 'Lato Bold': SP_GF + 'lato/Lato-Bold.ttf', 'Lato Regular': SP_GF + 'lato/Lato-Regular.ttf' };
+const SP_LOOKS = [['hero', 'Photo hero'], ['editorial', 'Editorial'], ['split', 'Split'], ['card', 'Brand card'], ['moody', 'Moody'],
+  ['polaroid', 'Polaroid'], ['blob', 'Blob (brand device)'], ['wave', 'Wavy band (brand device)']];
+const SP_LOOKNAME = Object.fromEntries(SP_LOOKS);
+function spGuideDraft(){
+  const g = SP_GUIDE || {};
+  return { colours: Object.assign({ primary: '', light: '', dark: '', accent: '', secondary_accent: '' }, g.colours || {}),
+    fonts: JSON.parse(JSON.stringify(g.fonts || {})), looks: (g.looks || []).slice(), refs: (g.refs || []).map(r => Object.assign({}, r)),
+    logo_rule: g.logo_rule || '', photo_rule: g.photo_rule || '', dos: g.dos || '', donts: g.donts || '' };
+}
+function spFontSel(key, cur){
+  const name = (cur && cur.name) || '';
+  const known = Object.keys(SP_FONTS);
+  return '<select data-sgfont="' + key + '"><option value="">Default</option>' + known.map(n => '<option' + (n === name ? ' selected' : '') + '>' + esc(n) + '</option>').join('')
+    + (name && !known.includes(name) ? '<option selected value="' + esc(name) + '">' + esc(name) + ' (client font)</option>' : '') + '</select>';
+}
+function spGuidePanel(){
+  if (!CFG.socialGenerate || ME.kind !== 'internal') return '';
+  const g = SP_GUIDE, d = SP_GUIDE_EDIT;
+  const head = '<button type="button" class="sp-gtog" data-spguide="toggle">&#127912; Design guide' + (g ? '' : ' (not set up yet)') + ' <span>' + (SP_GUIDE_OPEN ? '&#9650;' : '&#9660;') + '</span></button>';
+  if (!SP_GUIDE_OPEN) return '<div class="sp-guide">' + head + '</div>';
+  if (!d) {
+    const c = (g && g.colours) || {}, sw = Object.entries(c).filter(([, v]) => v).map(([k, v]) => '<span class="sp-sw" style="background:' + esc(v) + '" title="' + esc(k) + ' ' + esc(v) + '"></span>').join('');
+    const looks = ((g && g.looks) || []).map(l => esc(SP_LOOKNAME[l.look] || l.look) + (l.max ? ' (max ' + l.max + ')' : '')).join(', ') || 'All looks';
+    const refs = ((g && g.refs) || []).map(r => '<a href="' + esc(r.url) + '" target="_blank" rel="noopener" class="sp-ref ' + esc(r.verdict || '') + '" title="' + esc((r.verdict || 'reference') + ': ' + (r.note || '')) + '"><img src="' + esc(r.url) + '" alt="" loading="lazy"></a>').join('');
+    const f = (g && g.fonts) || {};
+    return '<div class="sp-guide open">' + head + '<div class="sp-gbody">'
+      + '<div class="sp-grow"><b>Colours</b>' + (sw || '<span class="gp-sub">Not set</span>') + '</div>'
+      + '<div class="sp-grow"><b>Fonts</b>' + esc((f.headline && f.headline.name) || 'Default') + (f.headline && f.headline.upper ? ' (ALL CAPS)' : '') + ' &middot; ' + esc((f.body && f.body.name) || 'Default') + '</div>'
+      + '<div class="sp-grow"><b>Looks</b>' + looks + '</div>'
+      + (g && g.logo_rule ? '<div class="sp-grow"><b>Logo</b>' + esc(g.logo_rule) + '</div>' : '')
+      + (g && g.photo_rule ? '<div class="sp-grow"><b>Photos</b>' + esc(g.photo_rule) + '</div>' : '')
+      + (g && g.dos ? '<div class="sp-grow"><b>What works</b>' + esc(g.dos) + '</div>' : '')
+      + (g && g.donts ? '<div class="sp-grow"><b>Never</b>' + esc(g.donts) + '</div>' : '')
+      + '<div class="sp-grow"><b>References</b>' + (refs ? '<span class="sp-refs">' + refs + '</span>' : '<span class="gp-sub">None yet. Add past designs that were liked, and any that were rejected.</span>') + '</div>'
+      + '<button type="button" class="btn" data-spguide="edit">Edit design guide</button></div></div>';
+  }
+  const ci = (k, lab) => '<label>' + lab + '<span class="sp-ci"><input type="color" data-sgcol="' + k + '" value="' + esc(/^#[0-9a-f]{6}$/i.test(d.colours[k] || '') ? d.colours[k] : '#ffffff') + '"><input data-sgcolt="' + k + '" value="' + esc(d.colours[k] || '') + '" placeholder="#000000"></span></label>';
+  const lk = new Map(d.looks.map(l => [l.look, l]));
+  return '<div class="sp-guide open">' + head + '<div class="sp-gbody sp-gedit">'
+    + '<div class="sp-gcols">' + ci('primary', 'Main brand colour') + ci('light', 'Light background') + ci('dark', 'Dark') + ci('accent', 'Accent (emphasis words)') + ci('secondary_accent', 'Second accent') + '</div>'
+    + '<div class="sp-gcols"><label>Headline font ' + spFontSel('headline', d.fonts.headline) + '</label><label class="sp-chk"><input type="checkbox" data-sgupper' + (d.fonts.headline && d.fonts.headline.upper ? ' checked' : '') + '> ALL CAPS headlines</label>'
+    + '<label>Body font ' + spFontSel('body', d.fonts.body) + '</label></div>'
+    + '<div class="sp-glooks"><b>Looks the designer may use</b> <span class="gp-sub">Tick the ones that suit this client. A number caps it per month.</span>'
+    + SP_LOOKS.map(([k, n]) => '<label class="sp-chk"><input type="checkbox" data-sglook="' + k + '"' + (!d.looks.length || lk.has(k) ? ' checked' : '') + '> ' + esc(n)
+      + ' <input type="number" min="1" max="20" data-sgmax="' + k + '" value="' + esc((lk.get(k) || {}).max || '') + '" placeholder="any"></label>').join('') + '</div>'
+    + '<label>Logo rule<input data-sgt="logo_rule" value="' + esc(d.logo_rule) + '" placeholder="e.g. small, top left, only on graphic-led posts"></label>'
+    + '<label>Photo rule<input data-sgt="photo_rule" value="' + esc(d.photo_rule) + '" placeholder="e.g. bright food and baking, texture is the hero, no competitor products"></label>'
+    + '<label>What works for this client<textarea data-sgt="dos" placeholder="Styles and devices that land: e.g. organic blobs holding the text, wavy icing bands, product pouches">' + esc(d.dos) + '</textarea></label>'
+    + '<label>Never<textarea data-sgt="donts" placeholder="Rejected styles, elements and words">' + esc(d.donts) + '</textarea></label>'
+    + '<div class="sp-grefs"><b>Reference designs</b> <span class="gp-sub">Image links of past posts. The designer looks at these before designing a month.</span>'
+    + d.refs.map((r, i) => '<div class="sp-gref"><input data-sgref="url" data-i="' + i + '" value="' + esc(r.url || '') + '" placeholder="https://...jpg"><input data-sgref="note" data-i="' + i + '" value="' + esc(r.note || '') + '" placeholder="What it is, what was said">'
+      + '<select data-sgref="verdict" data-i="' + i + '">' + ['liked', 'reference', 'rejected'].map(v => '<option' + ((r.verdict || 'reference') === v ? ' selected' : '') + '>' + v + '</option>').join('') + '</select>'
+      + '<button type="button" class="x" data-spguide="rmref" data-i="' + i + '" title="Remove">&times;</button></div>').join('')
+    + '<button type="button" class="btn ghost" data-spguide="addref">+ Add reference</button></div>'
+    + '<div class="row"><button type="button" class="btn" data-spguide="save">Save design guide</button><button type="button" class="btn ghost" data-spguide="cancel">Cancel</button></div>'
+    + '</div></div>';
+}
+function spGuideRead(el){
+  const d = SP_GUIDE_EDIT; if (!d) return d;
+  el.querySelectorAll('[data-sgcolt]').forEach(i => { d.colours[i.dataset.sgcolt] = i.value.trim(); });
+  ['headline', 'body'].forEach(k => { const v = (el.querySelector('[data-sgfont="' + k + '"]') || {}).value || '';
+    const was = d.fonts[k] || {};
+    d.fonts[k] = v ? { name: v, url: SP_FONTS[v] || (was.name === v ? was.url : '') } : {}; });
+  const up = el.querySelector('[data-sgupper]'); if (d.fonts.headline) d.fonts.headline.upper = !!(up && up.checked);
+  d.looks = [...el.querySelectorAll('[data-sglook]')].filter(i => i.checked).map(i => { const m = Number((el.querySelector('[data-sgmax="' + i.dataset.sglook + '"]') || {}).value) || null; return m ? { look: i.dataset.sglook, max: m } : { look: i.dataset.sglook }; });
+  el.querySelectorAll('[data-sgt]').forEach(i => { d[i.dataset.sgt] = i.value; });
+  el.querySelectorAll('[data-sgref]').forEach(i => { const r = d.refs[Number(i.dataset.i)]; if (r) r[i.dataset.sgref] = i.value.trim(); });
+  return d;
+}
+async function spGuideAct(el, a, b){
+  if (a === 'toggle') { SP_GUIDE_OPEN = !SP_GUIDE_OPEN; spPaint(el); return; }
+  if (a === 'edit') { SP_GUIDE_EDIT = spGuideDraft(); spPaint(el); return; }
+  if (a === 'cancel') { SP_GUIDE_EDIT = null; spPaint(el); return; }
+  spGuideRead(el);
+  if (a === 'addref') { SP_GUIDE_EDIT.refs.push({ url: '', note: '', verdict: 'liked' }); spPaint(el); return; }
+  if (a === 'rmref') { SP_GUIDE_EDIT.refs.splice(Number(b.dataset.i), 1); spPaint(el); return; }
+  if (a === 'save') {
+    const d = SP_GUIDE_EDIT; d.refs = d.refs.filter(r => /^https?:/.test(r.url || ''));
+    Object.keys(d.colours).forEach(k => { if (!/^#[0-9a-f]{6}$/i.test(d.colours[k] || '')) delete d.colours[k]; });
+    b.disabled = true; badge('Saving…');
+    const { data, error } = await sb.rpc('ch_social_design_save', { p_client: CLIENT_ID, p_guide: d });
+    if (error) { badge('Could not save the design guide. Please try again.', 'err'); b.disabled = false; return; }
+    SP_GUIDE = data; SP_GUIDE_EDIT = null; badge('Design guide saved', 'ok'); spPaint(el);
+  }
+}
 function spSlidesStrip(r){
   const u = Array.isArray(r.media_urls) ? r.media_urls : [];
   if (r.kind !== 'carousel' || u.length < 2) return '';
@@ -6171,19 +6290,52 @@ function spSlidesStrip(r){
 }
 function spMakeRow(r, staff, rel){
   if (!staff || !CFG.socialGenerate || !['post', 'carousel'].includes(r.kind) || r.status === 'approved') return '';
-  const busy = SP_RENDER[r.id];
-  return '<div class="sp-make"><button type="button" class="btn ghost" data-sp="render"' + (busy ? ' disabled' : '') + '>'
-    + (busy ? 'Making the graphic…' : r.media_url ? '&#8635; Remake graphic' : '&#127912; Make graphic') + '</button>'
-    + '<span>From the client&rsquo;s own photos and this brief' + (rel ? '. The client sees the new one straight away.' : '.') + '</span></div>';
+  const busy = SP_RENDER[r.id], ds = (SP_BRIEFS[r.id] || {}).design;
+  return '<div class="sp-make">' + (ds && ds.look ? '<span class="sp-look">Look: ' + esc(SP_LOOKNAME[ds.look] || ds.look) + '</span>' : '')
+    + '<button type="button" class="btn ghost" data-sp="render"' + (busy ? ' disabled' : '') + '>'
+    + (busy ? 'Making the graphic…' : r.media_url ? '&#8635; Remake' : '&#127912; Make graphic') + '</button>'
+    + (r.media_url && !busy ? '<button type="button" class="btn ghost" data-sp="newlook" title="Try a different look for this card">&#10024; New look</button>' : '')
+    + '<span>From the client&rsquo;s own photos, the design guide and this brief' + (rel ? '. The client sees the new one straight away.' : '.') + '</span></div>';
 }
-async function spRender(id){
+// Design and make every static and carousel graphic still missing in a month: the art director plans the looks
+// from the design guide, then each card is drawn. Reels and stories wait for Archie.
+async function spMakeMonth(el, mk){
+  const todo = SP_ROWS.filter(x => x.month_key === mk && ['post', 'carousel'].includes(x.kind) && !x.media_url);
+  if (!todo.length) return;
+  SP_GEN_PROG = 'Designing the month (' + todo.length + ' cards)'; spPaint(el);
+  try { await spRenderCall({ client_id: CLIENT_ID, month: mk, plan: true });
+        const { data: bs } = await sb.from('ch_social_briefs').select('*').eq('client_id', CLIENT_ID); (bs || []).forEach(b => { SP_BRIEFS[b.post_id] = b; }); }
+  catch (err) { badge('Design plan: ' + err.message + ' Making them with default looks.', 'err'); }
+  let done = 0, failed = 0;
+  for (const x of todo) {
+    SP_GEN_PROG = 'Making graphics: ' + (done + failed + 1) + ' of ' + todo.length; spPaint(el);
+    try { await spRender(x.id); done++; } catch (err) { failed++; }
+  }
+  SP_GEN_PROG = '';
+  badge(done + ' graphic' + (done === 1 ? '' : 's') + ' made' + (failed ? ', ' + failed + ' could not be made (use Make graphic on the card)' : ''), failed ? 'err' : 'ok');
+  spPaint(el);
+}
+function spMakeBar(mk){
+  if (!CFG.socialGenerate || ME.kind !== 'internal' || SP_GEN || SP_GEN_PROG) return '';
+  const n = SP_ROWS.filter(x => x.month_key === mk && ['post', 'carousel'].includes(x.kind) && !x.media_url).length;
+  if (!n) return '';
+  return '<div class="sp-gen"><span class="sp-gt"><b>' + n + ' static' + (n === 1 ? '' : 's') + ' and carousels without a graphic</b>'
+    + 'The designer plans a look for each from the design guide, then makes them from the client&rsquo;s own photos.</span>'
+    + '<button type="button" class="btn" data-spmakeall="' + esc(mk) + '">&#127912; Design graphics for ' + esc(monthName(mk)) + '</button></div>';
+}
+async function spRenderCall(body){
   const { data: { session } } = await sb.auth.getSession();
   const r = await fetch(CFG.sbUrl + '/functions/v1/social-render', { method: 'POST',
     headers: { 'Content-Type': 'application/json', apikey: CFG.sbKey, Authorization: 'Bearer ' + session.access_token },
-    body: JSON.stringify({ post_id: id }) });
+    body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.error) throw new Error(j.error || ('Could not make the graphic (' + r.status + ').'));
+  return j;
+}
+async function spRender(id, fresh){
+  const j = await spRenderCall({ post_id: id, fresh: !!fresh });
   const row = SP_ROWS.find(x => x.id === id); if (row && j.post) Object.assign(row, j.post);
+  const { data: br } = await sb.from('ch_social_briefs').select('*').eq('post_id', id).maybeSingle(); if (br) SP_BRIEFS[id] = br;
   return j;
 }
 function spCard(r){
@@ -6245,15 +6397,15 @@ function spPaint(el){
   const body = el.querySelector('#spBody'); if (!body) return;
   const keys = spMonthKeys();
   if (!keys.length) {
-    body.innerHTML = spGenBar() + '<p class="empty">' + (ME.kind === 'internal' ? 'No social posts yet.' : 'Your first month of posts is being made. It will appear here for your approval as soon as it is ready.') + '</p>';
+    body.innerHTML = spGenBar() + spGuidePanel() + '<p class="empty">' + (ME.kind === 'internal' ? 'No social posts yet.' : 'Your first month of posts is being made. It will appear here for your approval as soon as it is ready.') + '</p>';
     return;
   }
   SP_MONTH = spPickMonth(keys);
   const mr = SP_ROWS.filter(r => r.month_key === SP_MONTH), li = spLinkedIn(SP_MONTH), staff = ME.kind === 'internal';
   const appr = mr.filter(r => r.status === 'approved').length, chg = mr.filter(r => r.status === 'changes').length;
-  let h = spGenBar() + spMonthStrip(keys)
+  let h = spGenBar() + spGuidePanel() + spMonthStrip(keys)
         + '<h3 class="sp-month">' + esc(monthName(SP_MONTH)) + '<span>' + (mr.length + li.length) + ' items</span></h3>'
-        + spReleaseBar(SP_MONTH);
+        + spReleaseBar(SP_MONTH) + spMakeBar(SP_MONTH);
   if (ME.kind !== 'internal' || spReleased(SP_MONTH)) {
     h += '<div class="sp-sum"><span><b>' + (mr.length - appr - chg) + '</b> waiting</span><span><b>' + appr + '</b> approved</span>'
        + (chg ? '<span><b>' + chg + '</b> with changes requested</span>' : '') + '</div>';
@@ -6299,6 +6451,8 @@ async function spAct(el, r, action, note){
 }
 function spWire(el){
   el.addEventListener('input', e => {
+    const cp = e.target.closest('[data-sgcol]');
+    if (cp) { const t = el.querySelector('[data-sgcolt="' + cp.dataset.sgcol + '"]'); if (t) t.value = cp.value; return; }
     const ta = e.target.closest('textarea[data-spdraft]'); if (!ta) return;
     const card = ta.closest('[data-spid]'); if (!card) return;
     spDraftSet(card.dataset.spid, ta.dataset.spdraft, ta.value.trim() ? ta.value : '');
@@ -6307,6 +6461,10 @@ function spWire(el){
   el.addEventListener('click', async e => {
     const mc = e.target.closest('[data-spmonth]');
     if (mc) { SP_MONTH = mc.dataset.spmonth; spPaint(el); return; }
+    const mb = e.target.closest('[data-spmakeall]');
+    if (mb) { await spMakeMonth(el, mb.dataset.spmakeall); return; }
+    const gq = e.target.closest('[data-spguide]');
+    if (gq) { await spGuideAct(el, gq.dataset.spguide, gq); return; }
     const gb = e.target.closest('[data-spgen]');
     if (gb) {
       const sel = el.querySelector('[data-spgenm]'), mk = sel && sel.value; if (!mk || SP_GEN) return;
@@ -6332,18 +6490,7 @@ function spWire(el){
       }
       badge(msg, ok ? 'ok' : 'err');
       await spLoad(el);
-      if (ok) {
-        // Our own cards get their graphics straight away; reels and stories wait for Archie.
-        const todo = SP_ROWS.filter(x => x.month_key === mk && ['post', 'carousel'].includes(x.kind) && !x.media_url);
-        let done = 0, failed = 0;
-        for (const x of todo) {
-          SP_GEN_PROG = 'Making graphics: ' + (done + failed + 1) + ' of ' + todo.length; spPaint(el);
-          try { await spRender(x.id); done++; } catch (err) { failed++; }
-        }
-        SP_GEN_PROG = '';
-        if (todo.length) badge(done + ' graphic' + (done === 1 ? '' : 's') + ' made' + (failed ? ', ' + failed + ' could not be made (use Make graphic on the card)' : ''), failed ? 'err' : 'ok');
-        spPaint(el);
-      }
+      if (ok) await spMakeMonth(el, mk);
       return;
     }
     const rb = e.target.closest('[data-sprel]');
@@ -6362,9 +6509,9 @@ function spWire(el){
     const a = b.dataset.sp;
     if (a === 'editbrief') { SP_BRIEF_EDIT[r.id] = spBriefDraft(r); spPaint(el); const t = card && el.querySelector('[data-spid="' + CSS.escape(r.id) + '"] .sp-brief input'); if (t) t.focus(); return; }
     if (a === 'cancelbrief') { delete SP_BRIEF_EDIT[r.id]; spPaint(el); return; }
-    if (a === 'render') {
+    if (a === 'render' || a === 'newlook') {
       SP_RENDER[r.id] = true; spPaint(el);
-      try { await spRender(r.id); badge('Graphic made', 'ok'); }
+      try { await spRender(r.id, a === 'newlook'); badge('Graphic made', 'ok'); }
       catch (err) { badge(err.message, 'err'); }
       delete SP_RENDER[r.id]; spPaint(el); return;
     }
